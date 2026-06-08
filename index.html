@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<!-- =====================================================================
+     계통수 랩 (Phylo Lab)
+     © 2026 조현우 (Cho Hyeonu) — 제작자 표기.
+     이 저작물의 제작자 크레디트(상기 표기 및 화면/링크 내 'Made by 조현우')를
+     삭제하거나 변경하지 마십시오. Do not remove this attribution.
+===================================================================== -->
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="author" content="조현우 (Cho Hyeonu)">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#064e3b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>계통수 랩 · Phylo Lab v4</title>
+
+<!--
+  외부 라이브러리는 "가벼운 CDN 3종"만 사용 (추가 금지)
+  - canvas-confetti / lz-string / qrcode-generator
+  셋 다 "없으면 우아하게 폴백"되도록 코드에서 가드. 아이콘은 인라인 SVG/이모지.
+-->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js" defer></script>
+
+<style>
+  /* ===================================================================
+     1. 디자인 토큰 (Botanical Modern UI)
+     =================================================================== */
+  :root{
+    --primary:#064e3b; --secondary:#14b8a6; --secondary-d:#0d9488;
+    --accent:#f59e0b; --accent-soft:#fffbeb; --accent-ink:#b45309;
+    --bg:#f8fafc; --card:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --o:#059669; --o-soft:#d1fae5; --x:#e11d48; --x-soft:#ffe4e6; --teal-soft:#ccfbf1;
+    --shadow:0 10px 30px -12px rgba(2,44,34,.25); --nav-h:64px;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; }
+  body{
+    font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    background:
+      radial-gradient(1200px 500px at 100% -5%, #ccfbf1 0%, transparent 55%),
+      radial-gradient(900px 500px at -10% 0%, #d1fae5 0%, transparent 45%), var(--bg);
+    color:var(--ink); line-height:1.55; min-height:100vh;
+    padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);
+  }
+  /* 도전/작도 모드(잠금)에서는 하단 HUD 만큼 본문 여백 추가 */
+  body.locked-mode{ padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 62px); }
+
+  .topbar{ position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:10px;
+    padding:14px clamp(14px,4vw,22px); background:rgba(255,255,255,.62);
+    backdrop-filter:blur(14px) saturate(1.4); -webkit-backdrop-filter:blur(14px) saturate(1.4);
+    border-bottom:1px solid rgba(255,255,255,.6); box-shadow:0 4px 20px -16px rgba(2,44,34,.6); }
+  .brand{ display:flex; align-items:center; gap:9px; font-weight:800; font-size:clamp(16px,4.4vw,19px);
+    letter-spacing:-.4px; color:var(--primary); margin-right:auto; }
+  .brand .logo{ display:grid; place-items:center; width:34px; height:34px; border-radius:11px;
+    background:linear-gradient(140deg,var(--primary),var(--secondary)); color:#fff; box-shadow:var(--shadow); }
+  .brand small{ display:block; font-size:11px; font-weight:600; color:var(--muted); letter-spacing:.3px; }
+  .icon-btn{ display:grid; place-items:center; width:42px; height:42px; border-radius:12px; cursor:pointer;
+    border:1px solid var(--line); background:rgba(255,255,255,.7); color:var(--primary);
+    transition:transform .08s, background .15s; flex:0 0 auto; }
+  .icon-btn:hover{ background:#fff; } .icon-btn:active{ transform:scale(.94); }
+
+  main{ max-width:860px; margin:auto; padding:clamp(14px,4vw,22px); }
+  .view{ display:none; } .view.active{ display:block; animation:slideUp .42s cubic-bezier(.16,1,.3,1); }
+  @keyframes slideUp{ from{ opacity:0; transform:translateY(16px);} to{ opacity:1; transform:none;} }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:20px;
+    padding:clamp(16px,4.5vw,24px); box-shadow:var(--shadow); margin-bottom:16px; }
+  .card-h{ display:flex; align-items:center; gap:11px; margin:0 0 4px; }
+  .card-h .badge{ display:grid; place-items:center; width:38px; height:38px; border-radius:12px; flex:0 0 auto;
+    background:var(--primary); color:#fff; font-weight:800; font-size:16px; box-shadow:var(--shadow); }
+  .card-h .badge.amber{ background:var(--accent); }
+  .card-h h2{ margin:0; font-size:clamp(17px,4.6vw,20px); letter-spacing:-.4px; }
+  .hint{ color:var(--muted); font-size:13.5px; margin:6px 0 16px; } .hint b{ color:var(--ink); }
+
+  .row{ display:flex; gap:9px; }
+  input[type=text]{ flex:1; min-width:0; padding:14px 15px; font-size:16px; border:1.6px solid var(--line);
+    border-radius:13px; outline:none; background:#fff; color:var(--ink); transition:border .15s, box-shadow .15s; }
+  input[type=text]:focus{ border-color:var(--secondary); box-shadow:0 0 0 4px rgba(20,184,166,.14); }
+  input:disabled, .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  .btn{ border:none; border-radius:13px; padding:14px 16px; font-size:15px; font-weight:800; cursor:pointer;
+    transition:transform .07s, filter .15s, background .15s; white-space:nowrap; display:inline-flex;
+    align-items:center; justify-content:center; gap:7px; }
+  .btn:active{ transform:translateY(1px); }
+  .btn-add{ background:var(--primary); color:#fff; box-shadow:var(--shadow); } .btn-add:hover{ filter:brightness(1.1); }
+  .btn-ghost{ background:#fff; color:var(--primary); border:1.6px solid #cdeee6; } .btn-ghost:hover{ background:#f0fdfa; }
+  .btn-next{ width:100%; margin-top:16px; padding:16px; font-size:16px;
+    background:linear-gradient(135deg,var(--primary),var(--secondary)); color:#fff; box-shadow:var(--shadow); }
+  .toolbar{ display:flex; gap:9px; flex-wrap:wrap; margin-top:14px; } .toolbar .btn{ flex:1 1 140px; }
+
+  .lockmsg{ display:none; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:12px;
+    padding:11px 14px; font-size:13px; font-weight:700; margin:0 0 14px; }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:9px; margin-top:14px; }
+  .chip{ display:inline-flex; align-items:center; gap:8px; border-radius:999px; padding:8px 9px 8px 14px;
+    font-weight:700; font-size:14px; animation:pop .25s ease; }
+  .chip.trait{ background:var(--accent-soft); color:var(--accent-ink); border:1px solid #fde68a; }
+  .chip.sp{ background:#ecfeff; color:#0e7490; border:1px solid #a5f3fc; }
+  @keyframes pop{ from{ transform:scale(.8); opacity:0;} to{ transform:none; opacity:1;} }
+  .chip .del{ border:none; width:21px; height:21px; border-radius:50%; cursor:pointer; font-size:13px;
+    line-height:1; display:grid; place-items:center; background:rgba(0,0,0,.08); color:inherit; }
+  .empty{ color:var(--muted); font-size:13px; font-style:italic; margin-top:12px; }
+
+  /* 분석표 */
+  .table-scroll{ overflow-x:auto; border-radius:14px; border:1px solid var(--line); -webkit-overflow-scrolling:touch; }
+  table{ border-collapse:separate; border-spacing:0; width:100%; min-width:max-content; }
+  thead th{ background:#f1f5f9; font-size:13px; font-weight:800; color:#334155; padding:12px 12px;
+    border-bottom:2px solid var(--line); white-space:nowrap; cursor:pointer; }
+  thead th.conflict{ background:#fef3c7; color:var(--accent-ink); box-shadow:inset 0 -3px 0 var(--accent); }
+  thead th .del{ margin-left:7px; }
+  tbody td.name{ position:sticky; left:0; z-index:2; background:#fff; font-weight:800; font-size:14px;
+    padding:0 14px; text-align:left; white-space:nowrap; border-right:1px solid var(--line);
+    box-shadow:3px 0 7px -5px rgba(0,0,0,.22); }
+  tbody tr:nth-child(even) td.name{ background:#fafcfe; }
+  .cell{ cursor:pointer; user-select:none; font-weight:800; font-size:18px; width:60px; height:54px;
+    text-align:center; border-bottom:1px solid var(--line); transition:background .12s, color .12s; }
+  .cell-o{ background:var(--o-soft); color:var(--o); } .cell-x{ background:#fff; color:#cbd5e1; }
+  .cell.conflict{ box-shadow:inset 0 0 0 2px rgba(245,158,11,.45); }
+  .cell:active{ filter:brightness(.93); } .cell.ro{ cursor:default; }
+  .del{ border:none; background:#f1f5f9; color:#94a3b8; width:21px; height:21px; border-radius:50%;
+    cursor:pointer; font-size:12px; line-height:1; display:grid; place-items:center; flex:0 0 auto; }
+  .del:hover{ background:var(--x-soft); color:var(--x); }
+  .name-wrap{ display:flex; align-items:center; gap:9px; }
+  .tag-out{ display:inline-block; margin-left:7px; font-size:11px; font-weight:800; color:#7c3aed;
+    background:#f5f3ff; border:1px solid #ddd6fe; border-radius:7px; padding:1px 7px; vertical-align:middle; }
+
+  /* 🎲 무작위 탐구 챌린지 (미션 제너레이터) */
+  .mission-box{ background:linear-gradient(135deg,#ecfeff,#f0fdfa); border:1.5px solid #99f6e4;
+    border-radius:16px; padding:14px 16px; margin-bottom:16px; }
+  .mission-h{ font-weight:900; color:var(--primary); font-size:15px; margin-bottom:11px; display:flex; align-items:center; gap:6px; }
+  .mission-row{ display:flex; align-items:center; gap:11px; margin-bottom:10px; }
+  .mission-row label{ font-size:13px; font-weight:800; color:#334155; min-width:96px; }
+  .mission-row label b{ color:var(--secondary-d); font-size:14px; }
+  .mission-row select{ flex:1; padding:10px 11px; border:1.5px solid var(--line); border-radius:11px;
+    font-size:14px; font-weight:700; background:#fff; color:var(--ink); }
+  .mission-row input[type=range]{ flex:1; accent-color:var(--secondary); height:24px; }
+
+  /* 🏠 시작 화면 — 직접 만들기 / 무작위 만들기 분기 카드 */
+  .start-card{ display:flex; align-items:center; gap:14px; width:100%; text-align:left; cursor:pointer;
+    background:#fff; border:1.6px solid var(--line); border-radius:16px; padding:16px; margin-top:12px;
+    transition:border .15s, transform .08s, box-shadow .15s; font-family:inherit; color:inherit; }
+  .start-card:hover{ border-color:var(--secondary); box-shadow:0 8px 22px -14px rgba(2,44,34,.45); }
+  .start-card:active{ transform:translateY(1px); }
+  .start-card .sc-emoji{ font-size:30px; flex:0 0 auto; line-height:1; }
+  .start-card .sc-body{ display:flex; flex-direction:column; gap:3px; }
+  .start-card .sc-body b{ font-size:16px; color:var(--ink); }
+  .start-card .sc-body small{ font-size:12.5px; color:var(--muted); }
+  .start-card .sc-arrow{ margin-left:auto; font-size:22px; color:var(--secondary); font-weight:900; }
+  .start-card.gen{ display:block; cursor:default; background:linear-gradient(135deg,#ecfeff,#f0fdfa); border-color:#99f6e4; }
+  .start-card.gen .sc-row{ display:flex; align-items:center; gap:12px; font-size:16px; font-weight:900; color:var(--primary); }
+  .start-card.gen .sc-row .sc-emoji{ font-size:26px; }
+  .sc-sub{ font-size:12.5px; color:var(--muted); margin:8px 0 12px; }
+
+  /* 충돌 셀 네온 */
+  .cell.neon-a{ animation:neonRed .7s ease-in-out infinite; } .cell.neon-b{ animation:neonAmber .7s ease-in-out infinite; }
+  .cell.neon-am{ animation:neonRedDim .9s ease-in-out infinite; } .cell.neon-bm{ animation:neonAmberDim .9s ease-in-out infinite; }
+  @keyframes neonRed{ 0%,100%{ box-shadow:inset 0 0 0 2px #fb7185; } 50%{ box-shadow:inset 0 0 0 4px #f43f5e,0 0 14px rgba(244,63,94,.7); background:#fff1f2; } }
+  @keyframes neonAmber{ 0%,100%{ box-shadow:inset 0 0 0 2px #fbbf24; } 50%{ box-shadow:inset 0 0 0 4px #f59e0b,0 0 14px rgba(245,158,11,.7); background:#fffbeb; } }
+  @keyframes neonRedDim{ 50%{ box-shadow:inset 0 0 0 2px rgba(244,63,94,.4); } }
+  @keyframes neonAmberDim{ 50%{ box-shadow:inset 0 0 0 2px rgba(245,158,11,.4); } }
+
+  /* 결과 영역 */
+  .empty-state{ text-align:center; color:var(--muted); padding:34px 10px; font-size:14.5px; }
+  .score{ padding:16px 18px; border-radius:16px; background:linear-gradient(135deg,#ecfdf5,#f0fdfa); border:1px solid #a7f3d0; margin-bottom:14px; }
+  .dash{ width:100%; }
+  .dash-row{ display:flex; align-items:center; gap:12px; }
+  .dash-cost{ display:flex; flex-direction:column; line-height:1; }
+  .dc-num{ font-size:38px; font-weight:900; color:var(--primary); }
+  .dc-lab{ font-size:11px; font-weight:800; color:var(--muted); letter-spacing:.5px; margin-top:3px; }
+  .dash-verd{ margin-left:auto; font-weight:900; font-size:15px; text-align:right; }
+  .dash-verd.best{ color:var(--o); } .dash-verd.warn{ color:var(--accent-ink); }
+  .dash-gauge{ height:12px; border-radius:7px; background:#e2e8f0; overflow:hidden; margin:12px 0 8px; }
+  .dg-fill{ height:100%; border-radius:7px; background:linear-gradient(90deg,#f59e0b,#fbbf24); transition:width .5s cubic-bezier(.16,1,.3,1); }
+  .dg-fill.best{ background:linear-gradient(90deg,#10b981,#34d399); }
+  .dash-sub{ font-size:12.5px; color:var(--muted); font-weight:600; }
+
+  .banner{ border-radius:14px; padding:13px 15px; font-size:13.5px; margin-bottom:14px; }
+  .banner.info{ background:var(--accent-soft); border:1px solid #fde68a; color:var(--accent-ink); }
+  .banner.ok{ background:var(--o-soft); border:1px solid #a7f3d0; color:#047857; }
+  .banner .link{ color:inherit; font-weight:800; text-decoration:underline; cursor:pointer; background:none; border:none; padding:0; font-size:inherit; }
+
+  .tree-box{ overflow-x:auto; text-align:center; padding:6px 0; }
+  .tree-box svg{ width:100%; height:auto; display:block; margin:auto; max-width:760px; }
+  .branch{ stroke:var(--primary); stroke-width:5; fill:none; stroke-linecap:round; stroke-linejoin:round;
+    stroke-dasharray:2600; stroke-dashoffset:2600; animation:draw 1s ease forwards; }
+  .tip-dot{ fill:var(--secondary); }
+  .tip-label{ font:800 30px 'Pretendard','Malgun Gothic',sans-serif; fill:#0f172a; }
+  .tip-out{ font:700 21px 'Pretendard','Malgun Gothic',sans-serif; fill:#7c3aed; }
+  .syn-mark{ fill:var(--accent); stroke:#fff; stroke-width:2.5; }
+  .syn-pill{ fill:var(--accent-soft); stroke:var(--accent); stroke-width:2; }
+  .syn-label{ font:700 23px 'Pretendard','Malgun Gothic',sans-serif; fill:var(--accent-ink); }
+  .root-cap{ font:700 21px 'Pretendard','Malgun Gothic',sans-serif; fill:var(--muted); }
+  .node-hit{ fill:transparent; cursor:pointer; }
+  .node-dot{ fill:#fff; stroke:var(--secondary); stroke-width:3.5; transition:fill .15s; }
+  .nodeg:hover .node-dot{ fill:var(--accent); stroke:var(--accent); }
+  .fade{ opacity:0; animation:fade .55s ease forwards; }
+  @keyframes draw{ to{ stroke-dashoffset:0; } } @keyframes fade{ to{ opacity:1; } }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:12px 18px; margin-top:14px; padding-top:14px;
+    border-top:1px dashed var(--line); font-size:12.5px; color:#475569; }
+  .legend span{ display:inline-flex; align-items:center; gap:7px; }
+  .lg-line{ width:22px; height:5px; border-radius:3px; background:var(--primary); }
+  .lg-dot{ width:13px; height:13px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px #fff,0 0 0 3px var(--accent); }
+  .lg-node{ width:13px; height:13px; border-radius:50%; background:#fff; border:3px solid var(--secondary); }
+  .lg-out{ width:12px; height:12px; border-radius:4px; background:#f5f3ff; border:1px solid #ddd6fe; }
+
+  /* 피어 리뷰 */
+  .fb-badge{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 14px; border-radius:14px;
+    background:linear-gradient(135deg,#fef3c7,#fffbeb); border:1px solid #fde68a; font-weight:800; color:var(--accent-ink); margin-bottom:14px; }
+  .review{ padding:15px 16px; border-radius:16px; background:#eef2ff; border:1px solid #c7d2fe; margin-top:14px; }
+  .review h3{ margin:0 0 4px; color:#4338ca; font-size:17px; }
+  .stamp-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .stamp-grid .btn{ padding:14px 8px; font-size:14px; }
+  .stamp{ display:inline-flex; align-items:center; gap:5px; background:#fff; border:1px solid var(--line);
+    border-radius:999px; padding:5px 11px; font-size:13px; font-weight:800; color:var(--primary); }
+
+  /* 계통수 그리기(탭-합치기) 빌더 */
+  .draw-feed{ text-align:center; font-weight:800; color:var(--primary); margin:12px 0 16px; font-size:15px; }
+  .draw-tray{ display:flex; flex-wrap:wrap; gap:12px; justify-content:center; align-items:flex-start; }
+  .groupcard{ border:2px solid var(--line); border-radius:14px; padding:11px 13px; cursor:pointer; background:#fff;
+    transition:border .15s, transform .08s, box-shadow .15s; }
+  .groupcard:hover{ border-color:var(--secondary); } .groupcard:active{ transform:scale(.97); }
+  .groupcard.sel{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(245,158,11,.25); }
+  .clade{ display:flex; align-items:stretch; }
+  .clade > .bracket{ width:11px; border:2.5px solid var(--primary); border-right:none; border-radius:7px 0 0 7px; margin-right:7px; }
+  .clade > .kids{ display:flex; flex-direction:column; gap:7px; justify-content:center; }
+  .leafchip{ display:inline-block; background:var(--teal-soft); color:var(--primary); font-weight:800;
+    border-radius:9px; padding:6px 11px; font-size:14px; white-space:nowrap; border:1px solid #99f6e4; }
+
+  /* 하단 네비 */
+  .bottomnav{ position:fixed; left:0; right:0; bottom:0; z-index:45; display:flex; justify-content:center; gap:4px;
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom)); background:rgba(255,255,255,.78);
+    backdrop-filter:blur(16px) saturate(1.4); -webkit-backdrop-filter:blur(16px) saturate(1.4);
+    border-top:1px solid rgba(255,255,255,.7); box-shadow:0 -6px 24px -18px rgba(2,44,34,.7); }
+  .navbtn{ flex:1 1 0; max-width:140px; border:none; background:none; cursor:pointer; border-radius:14px;
+    padding:8px 4px; display:flex; flex-direction:column; align-items:center; gap:3px;
+    color:var(--muted); font-weight:700; font-size:11.5px; transition:color .15s, background .15s; }
+  .navbtn .nico{ font-size:21px; line-height:1; transition:transform .18s; }
+  .navbtn.on{ color:var(--primary); background:#e7f6f1; } .navbtn.on .nico{ transform:translateY(-1px) scale(1.12); }
+
+  /* 진행 HUD (도전/작도 잠금 모드 전용) */
+  .hud{ position:fixed; left:0; right:0; bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 6px); z-index:44;
+    display:none; align-items:center; gap:11px; width:min(620px,calc(100% - 24px)); margin:auto;
+    padding:9px 15px; border-radius:15px; background:rgba(6,78,59,.93); color:#fff;
+    backdrop-filter:blur(8px); box-shadow:0 12px 32px -10px rgba(2,44,34,.65); }
+  .hud-ic{ font-size:18px; } .hud-meta{ display:flex; flex-direction:column; line-height:1.05; }
+  .hud-num{ font-size:21px; font-weight:900; } .hud-lab{ font-size:10px; opacity:.82; font-weight:700; letter-spacing:.5px; }
+  .hud-gauge{ flex:1; height:9px; border-radius:6px; background:rgba(255,255,255,.22); overflow:hidden; }
+  .hud-fill{ height:100%; width:0; border-radius:6px; background:linear-gradient(90deg,#fbbf24,#34d399); transition:width .45s cubic-bezier(.16,1,.3,1); }
+  .hud-fill.best{ background:#34d399; }
+  .hud-target{ font-size:12px; font-weight:800; white-space:nowrap; opacity:.95; }
+
+  .gold-frame{ position:fixed; inset:0; z-index:55; pointer-events:none;
+    box-shadow:inset 0 0 0 5px #f59e0b, inset 0 0 46px rgba(245,158,11,.5); animation:goldPulse 1.6s ease-in-out infinite; }
+  @keyframes goldPulse{ 50%{ box-shadow:inset 0 0 0 7px #fbbf24, inset 0 0 70px rgba(245,158,11,.72); } }
+  /* 도전과제 오답 시 실패 이펙트 (붉은 프레임 + 카드 흔들림) */
+  .fail-frame{ position:fixed; inset:0; z-index:55; pointer-events:none;
+    box-shadow:inset 0 0 0 5px #f43f5e, inset 0 0 46px rgba(244,63,94,.4); animation:failPulse .9s ease; }
+  @keyframes failPulse{ 0%{opacity:0} 28%{opacity:1} 100%{opacity:0} }
+  .shake{ animation:shake .5s; }
+  @keyframes shake{ 0%,100%{transform:translateX(0)} 18%{transform:translateX(-9px)} 36%{transform:translateX(8px)} 54%{transform:translateX(-6px)} 72%{transform:translateX(4px)} 88%{transform:translateX(-2px)} }
+
+  /* 모달 · 투어 · 토스트 */
+  #modal-root:empty{ display:none; }
+  .overlay{ position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:18px;
+    background:rgba(2,6,23,.5); backdrop-filter:blur(4px); animation:fade .2s ease forwards; overflow:auto; }
+  .modal{ width:min(440px,100%); background:rgba(255,255,255,.94); backdrop-filter:blur(18px);
+    border:1px solid rgba(255,255,255,.8); border-radius:22px; padding:22px; box-shadow:0 30px 70px -20px rgba(2,44,34,.55);
+    animation:slideUp .3s cubic-bezier(.16,1,.3,1); }
+  .modal h3{ margin:0 0 4px; font-size:19px; color:var(--primary); }
+  .share-types{ display:flex; gap:7px; flex-wrap:wrap; margin:8px 0 6px; }
+  .share-type{ flex:1 1 auto; padding:9px 8px; font-size:13px; }
+  .share-type.on{ background:var(--primary); color:#fff; border-color:var(--primary); }
+  .qr-wrap{ width:200px; max-width:62vw; margin:8px auto 4px; background:#fff; padding:10px; border-radius:14px; border:1px solid var(--line); }
+  .qr-wrap svg{ width:100%; height:auto; display:block; }
+  #shareUrl{ font-size:13px; }
+  .tour-mask{ position:fixed; inset:0; z-index:70; }
+  .tour-hole{ position:fixed; z-index:71; border-radius:14px; box-shadow:0 0 0 9999px rgba(2,6,23,.66); pointer-events:none; transition:all .3s cubic-bezier(.16,1,.3,1); }
+  .tour-tip{ position:fixed; z-index:72; width:min(290px,86vw); background:#fff; border-radius:16px; padding:16px; box-shadow:0 24px 60px -16px rgba(0,0,0,.5); animation:fade .25s ease forwards; }
+  .tour-tip p{ margin:0 0 12px; font-size:14px; } .tour-tip .row{ gap:8px; } .tour-tip .btn{ flex:1; padding:11px; }
+  .tour-step{ font-size:11px; font-weight:800; color:var(--secondary); letter-spacing:1px; margin-bottom:6px; }
+  .toast{ position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:80; max-width:90vw; text-align:center;
+    background:rgba(6,78,59,.95); color:#fff; padding:12px 18px; border-radius:14px; font-weight:800; font-size:14px;
+    box-shadow:0 16px 40px -12px rgba(2,44,34,.6); animation:toastIn .4s cubic-bezier(.16,1,.3,1); }
+  @keyframes toastIn{ from{ opacity:0; transform:translate(-50%,-16px);} to{ opacity:1; transform:translate(-50%,0);} }
+
+  footer{ text-align:center; color:var(--muted); font-size:12px; margin-top:6px; }
+  @media(min-width:1024px){ .cell{ width:66px; } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/></svg></span>
+    <span>계통수 랩<small>공유파생형질로 그리는 진화</small></span>
+  </div>
+  <button id="helpBtn" class="icon-btn" title="도움말" onclick="openHelp()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>
+  <button id="shareBtn" class="icon-btn" title="공유 · QR" onclick="openShare()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+</header>
+
+<div id="goldFrame" class="gold-frame" style="display:none"></div>
+<div id="failFrame" class="fail-frame" style="display:none"></div>
+<div id="hud" class="hud">
+  <span class="hud-ic">⚡</span>
+  <div class="hud-meta"><b class="hud-num">—</b><span class="hud-lab">진행</span></div>
+  <div class="hud-gauge"><div class="hud-fill"></div></div>
+  <span class="hud-target">—</span>
+</div>
+
+<main>
+  <!-- 시작: 분기 선택 (직접 만들기 / 무작위 만들기) -->
+  <section id="view-0" class="view active">
+    <div class="card">
+      <div class="card-h"><span class="badge">🏠</span><h2>어떻게 시작할까요?</h2></div>
+      <p class="hint">문제를 <b>직접 만들거나</b>, 데이터뱅크에서 <b>무작위로</b> 뽑아 시작하세요. 언제든 하단 <b>🏠 시작</b> 탭에서 다시 고를 수 있어요.</p>
+      <button class="start-card" onclick="showView(1)">
+        <span class="sc-emoji">✏️</span>
+        <span class="sc-body"><b>직접 만들기</b><small>형질 → 종 → 분석표를 차례로 입력해 나만의 문제를 출제</small></span>
+        <span class="sc-arrow">→</span>
+      </button>
+      <div id="missionBox" class="start-card gen">
+        <div class="sc-row"><span class="sc-emoji">🎲</span><b>무작위 미션 만들기</b></div>
+        <p class="sc-sub">테마와 난이도를 고르고 버튼을 누르면 분석표가 자동 생성됩니다. (외군 보장 · 충돌 없는 유일 정답)</p>
+        <div class="mission-row"><label>테마</label><select id="missionTheme" onchange="onThemeChange()"></select></div>
+        <div class="mission-row"><label>종 개수 <b id="spVal">6</b></label><input type="range" id="spRange" min="3" max="11" value="6" oninput="document.getElementById('spVal').textContent=this.value"></div>
+        <div class="mission-row"><label>형질 개수 <b id="trVal">4</b></label><input type="range" id="trRange" min="2" max="8" value="4" oninput="document.getElementById('trVal').textContent=this.value"></div>
+        <button class="btn btn-add" style="width:100%" onclick="generateMission()">미션 생성 🔥</button>
+      </div>
+      <p class="maker-credit" style="text-align:center;color:var(--muted);font-size:11.5px;margin:18px 0 2px"></p>
+    </div>
+  </section>
+
+  <!-- STEP 1 : 형질 -->
+  <section id="view-1" class="view">
+    <div class="card">
+      <div class="card-h"><span class="badge">1</span><h2>형질 만들기</h2></div>
+      <div class="lockmsg"></div>
+      <p class="hint">진화하며 새로 생긴 형질(<b>공유파생형질</b>)을 입력하세요. 예: 척추, 턱, 네 다리, 양막(알), 털</p>
+      <div class="row">
+        <input id="traitInput" type="text" placeholder="형질 이름 입력 후 추가" maxlength="16">
+        <button id="traitAddBtn" class="btn btn-add" onclick="addTrait()">＋ 추가</button>
+      </div>
+      <div id="traitChips" class="chips"></div>
+      <button class="btn btn-next" onclick="showView(2)">다음: 종 만들기 →</button>
+    </div>
+  </section>
+
+  <!-- STEP 2 : 종 -->
+  <section id="view-2" class="view">
+    <div class="card">
+      <div class="card-h"><span class="badge">2</span><h2>종(생물) 만들기</h2></div>
+      <div class="lockmsg"></div>
+      <p class="hint">분석할 생물을 입력하세요. 형질을 하나도 갖지 않는 종은 자동으로 <b>외군(outgroup)</b>이 됩니다.</p>
+      <div class="row">
+        <input id="speciesInput" type="text" placeholder="생물 이름 입력 후 추가" maxlength="16">
+        <button id="speciesAddBtn" class="btn btn-add" onclick="addSpecies()">＋ 추가</button>
+      </div>
+      <div id="speciesChips" class="chips"></div>
+      <div class="toolbar">
+        <button class="btn btn-ghost" onclick="showView(1)">← 형질</button>
+        <button class="btn btn-add" onclick="showView(3)">다음: 분석표 →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STEP 3 : 분석표 -->
+  <section id="view-3" class="view">
+    <div class="card">
+      <div class="card-h"><span class="badge">3</span><h2>형질 분석표</h2></div>
+      <div class="lockmsg"></div>
+      <p class="hint">각 생물이 가진 형질 칸을 터치해 <b style="color:var(--o)">O</b>(있음)로 바꾸세요. 충돌(노란) 형질 머리글을 누르면 <b>양립 불가한 칸들이 네온으로 깜빡</b>입니다.</p>
+      <div id="matrixWrap"></div>
+      <div class="toolbar">
+        <button id="exampleBtn" class="btn btn-ghost" onclick="loadExample()">📚 예시 불러오기</button>
+        <button id="clearBtn" class="btn btn-ghost" onclick="clearAll()">🗑 전체 비우기</button>
+      </div>
+      <button class="btn btn-next" onclick="showView(4)">🌳 계통수 →</button>
+    </div>
+  </section>
+
+  <!-- STEP 4 : 결과 -->
+  <section id="view-4" class="view">
+    <div class="card">
+      <div class="card-h"><span class="badge amber">🌳</span><h2 id="resultTitle">완성된 계통수</h2></div>
+      <div id="needData" class="empty-state">형질과 종을 각각 1개 이상, 종은 2개 이상 입력하면<br>계통수가 자동으로 그려집니다.</div>
+      <div id="resultBody" style="display:none">
+        <div id="feedbackBadge" class="fb-badge" style="display:none"></div>
+        <!-- 계통수 그리기(탭-합치기) 빌더 -->
+        <div id="drawArea" style="display:none"></div>
+        <!-- 자동 계통수 결과 -->
+        <div id="autoResult">
+          <div id="scoreCard" class="score"></div>
+          <div id="banner"></div>
+          <div id="treeBox" class="tree-box"></div>
+          <div class="legend">
+            <span><i class="lg-line"></i> 진화·분기 경로</span>
+            <span><i class="lg-dot"></i> 형질이 처음 나타난 곳</span>
+            <span><i class="lg-node"></i> 분기점(터치=회전)</span>
+            <span><i class="lg-out"></i> 외군</span>
+          </div>
+          <p class="hint" style="margin-top:14px">💡 흰 <b>분기점(●)</b>을 누르면 가지의 위아래 순서가 바뀝니다. 순서가 달라도 진화적 관계는 똑같아요.</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-ghost" onclick="openShare()">📤 공유 · QR</button>
+          <button class="btn btn-ghost" onclick="showView(3)">📋 표 보기/수정</button>
+        </div>
+      </div>
+    </div>
+    <footer>형질·종·표를 바꾸면 계통수와 파시모니 점수가 즉시 갱신됩니다.<br><span class="maker-credit"></span></footer>
+  </section>
+</main>
+
+<nav class="bottomnav">
+  <button id="nav-0" class="navbtn on" onclick="showView(0)"><span class="nico">🏠</span>시작</button>
+  <button id="nav-1" class="navbtn"    onclick="showView(1)"><span class="nico">🧬</span>형질</button>
+  <button id="nav-2" class="navbtn"    onclick="showView(2)"><span class="nico">🦎</span>종</button>
+  <button id="nav-3" class="navbtn"    onclick="showView(3)"><span class="nico">📋</span>분석표</button>
+  <button id="nav-4" class="navbtn"    onclick="showView(4)"><span class="nico">🌳</span>계통수</button>
+</nav>
+
+<div id="modal-root"></div>
+
+<script>
+"use strict";
+  /* ===== 제작자 크레디트 — 이 한 줄(MAKER)만 바꾸면 화면·콘솔·모든 공유링크에 반영됩니다 ===== */
+  const MAKER = "조현우";
+  const MAKER_YEAR = "2026";
+  function renderCredit(){
+    document.querySelectorAll('.maker-credit').forEach(el=> el.innerHTML = `🛠️ Made by <b>${esc(MAKER)}</b> · © ${esc(MAKER_YEAR)}`);
+    try{ console.log(`%c🌳 계통수 랩 · Made by ${MAKER} © ${MAKER_YEAR}`, 'color:#064e3b;font-weight:800;font-size:13px'); }catch(e){}
+  }
+/* ===================================================================
+   0. 전역 상태
+   - appMode: 'free' | 'quiz' | 'draw'
+     free : 자유 편집 (기본/통과 후/제출 열람)
+     quiz : 🎯 도전과제 — 정답(출제 표)을 숨기고 빈칸을 채워 맞히기
+     draw : 🌳 계통수 그리기 — 표 고정, 트리를 탭-합치기로 직접 작도
+   - 제출(submission): 출제자 이름·풀이자 이름·완료 유형을 링크에 담아 역전송
+   =================================================================== */
+  let traits = [];                 // ["척추", ...]
+  let species = [];                // [{name, has:Set<traitName>}]
+  let rotations = {};              // 자동트리 노드 회전
+  let currentNodeSigs = [];
+  let conflictTraits = new Set();
+
+  let appMode = 'free';            // 'free' | 'quiz' | 'draw'
+  let solved = false;              // 도전/작도 통과 여부
+  let solvedType = null;           // 통과한 유형: 'quiz' | 'draw'
+  let answerMatrix = null;         // quiz 정답 (species×traits 0/1)
+  let authorName = '';             // 출제자 이름 (도전/작도 링크에 박힘)
+  let solverName = '';             // 풀이자 이름 (제출 시 입력)
+  let submission = null;           // 제출 링크로 열렸을 때 {au, sv, ty}
+  // draw(탭-합치기) 빌더 상태
+  let answerCladeSet = null;       // 정답 분기 집합(서명)
+  let drawGroups = [];             // [{leaves:[name], node}]
+  let drawSelected = -1;
+  let drawHistory = [];
+
+  const LS_KEY = 'phylo_lab_v4';
+  const TOUR_KEY = 'phylo_lab_tour_done';
+  const TYPE_LABEL = { quiz:'🎯 도전과제', draw:'🌳 계통수 그리기' };
+  const EXAMPLE = { t:["척추","턱","네 다리","양막(알)","털"],
+    s:[ ["창고기",[]], ["칠성장어",["척추"]], ["참치",["척추","턱"]], ["도롱뇽",["척추","턱","네 다리"]],
+        ["거북",["척추","턱","네 다리","양막(알)"]], ["표범",["척추","턱","네 다리","양막(알)","털"]] ] };
+
+  // ── 대규모 데이터 풀: 테마별 분류군. 각 종 has = 가진 공유파생형질 목록 ──
+  const PHYLO_DATABASE = {
+    vertebrate: { title:"척추동물의 여정 🐕",
+      traits:["척추","턱","네 다리","양막(알)","털","고래수염","깃털","날개"],
+      species:[
+        {name:"창고기",has:[]},
+        {name:"칠성장어",has:["척추"]},
+        {name:"참치",has:["척추","턱"]},
+        {name:"도롱뇽",has:["척추","턱","네 다리"]},
+        {name:"거북",has:["척추","턱","네 다리","양막(알)"]},
+        {name:"악어",has:["척추","턱","네 다리","양막(알)"]},
+        {name:"타조",has:["척추","턱","네 다리","양막(알)","깃털"]},
+        {name:"독수리",has:["척추","턱","네 다리","양막(알)","깃털","날개"]},
+        {name:"표범",has:["척추","턱","네 다리","양막(알)","털"]},
+        {name:"호랑이",has:["척추","턱","네 다리","양막(알)","털"]},
+        {name:"흰긴수염고래",has:["척추","턱","네 다리","양막(알)","털","고래수염"]} ] },
+    plants: { title:"육상 식물의 개척 🌿",
+      traits:["광합성","관다발","진정한 잎/뿌리","씨앗(종자)","꽃","과일(씨방)"],
+      species:[
+        {name:"해캄",has:[]},
+        {name:"우산이끼",has:["광합성"]},
+        {name:"솔이끼",has:["광합성"]},
+        {name:"고사리",has:["광합성","관다발","진정한 잎/뿌리"]},
+        {name:"쇠뜨기",has:["광합성","관다발","진정한 잎/뿌리"]},
+        {name:"소나무",has:["광합성","관다발","진정한 잎/뿌리","씨앗(종자)"]},
+        {name:"은행나무",has:["광합성","관다발","진정한 잎/뿌리","씨앗(종자)"]},
+        {name:"해바라기",has:["광합성","관다발","진정한 잎/뿌리","씨앗(종자)","꽃"]},
+        {name:"사과나무",has:["광합성","관다발","진정한 잎/뿌리","씨앗(종자)","꽃","과일(씨방)"]} ] },
+    arthropods: { title:"절지동물 제국 🐜",
+      traits:["외골격","더듬이","턱뼈(대악)","날개","사회성","복안(겹눈)"],
+      species:[
+        {name:"지렁이",has:[]},
+        {name:"거미",has:["외골격"]},
+        {name:"전갈",has:["외골격"]},
+        {name:"지네",has:["외골격","더듬이","턱뼈(대악)"]},
+        {name:"게",has:["외골격","더듬이","턱뼈(대악)","복안(겹눈)"]},
+        {name:"잠자리",has:["외골격","더듬이","턱뼈(대악)","복안(겹눈)","날개"]},
+        {name:"나비",has:["외골격","더듬이","턱뼈(대악)","복안(겹눈)","날개"]},
+        {name:"꿀벌",has:["외골격","더듬이","턱뼈(대악)","복안(겹눈)","날개","사회성"]},
+        {name:"개미",has:["외골격","더듬이","턱뼈(대악)","복안(겹눈)","사회성"]} ] },
+    monsters: { title:"판타지 크리처 🐉",
+      traits:["속성 에너지","사지(다리)","날개","브레스(불뿜기)","강철 피부"],
+      species:[
+        {name:"슬라임",has:[]},
+        {name:"피카츄",has:["속성 에너지","사지(다리)"]},
+        {name:"리자드",has:["속성 에너지","사지(다리)","브레스(불뿜기)"]},
+        {name:"리자몽",has:["속성 에너지","사지(다리)","브레스(불뿜기)","날개"]},
+        {name:"망나뇽",has:["속성 에너지","사지(다리)","날개"]},
+        {name:"보스로라",has:["속성 에너지","사지(다리)","강철 피부"]} ] }
+  };
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // 잠금 권한
+  const structureLocked = () => (appMode==='quiz' || appMode==='draw') && !solved; // 형질·종 구조 변경 금지
+  const cellsLocked     = () => appMode==='draw' && !solved;                        // 표 칸 토글 금지(읽기전용)
+
+/* ===================================================================
+   1. 데이터 변경
+   =================================================================== */
+  function commit(){
+    saveLocal(); renderTraitChips(); renderSpeciesChips(); renderMatrix(); refreshLockUI(); updateHUD();
+    checkQuiz();
+    if(document.getElementById('view-4').classList.contains('active')) renderTree(false);
+  }
+  function addTrait(){ if(structureLocked()) return;
+    const el=document.getElementById('traitInput'), v=el.value.trim();
+    if(!v || traits.includes(v)){ el.value=''; return; }
+    traits.push(v); el.value=''; el.focus(); commit(); }
+  function removeTrait(j){ if(structureLocked()) return; const name=traits[j]; traits.splice(j,1); species.forEach(s=>s.has.delete(name)); commit(); }
+  function addSpecies(){ if(structureLocked()) return;
+    const el=document.getElementById('speciesInput'), v=el.value.trim();
+    if(!v || species.some(s=>s.name===v)){ el.value=''; return; }
+    species.push({name:v, has:new Set()}); el.value=''; el.focus(); commit(); }
+  function removeSpecies(i){ if(structureLocked()) return; species.splice(i,1); commit(); }
+  function toggleCell(i,j){ if(cellsLocked()) return; const t=traits[j], h=species[i].has; h.has(t)?h.delete(t):h.add(t); commit(); }
+  function loadExample(){ if(structureLocked()) return; traits=[...EXAMPLE.t]; species=EXAMPLE.s.map(([n,ts])=>({name:n,has:new Set(ts)})); rotations={}; commit(); }
+  function clearAll(){ if(structureLocked()) return; traits=[]; species=[]; rotations={}; commit(); }
+
+  /* ── 🎲 무작위 미션 제너레이터 ──────────────────────────────────
+     · 외군(has=[]) 1개 보장 · 양립 가능한(충돌 없는) 형질만 그리디 선택
+     · 선택 종들의 유효 형질에서만 추출해 파편화 방지 · 비퇴화 검증 후 채택 */
+  function onThemeChange(){
+    const th=PHYLO_DATABASE[document.getElementById('missionTheme').value];
+    const spR=document.getElementById('spRange'), trR=document.getElementById('trRange');
+    spR.max=th.species.length; trR.max=th.traits.length;
+    if(+spR.value>+spR.max) spR.value=spR.max;
+    if(+trR.value>+trR.max) trR.value=trR.max;
+    document.getElementById('spVal').textContent=spR.value;
+    document.getElementById('trVal').textContent=trR.value;
+  }
+  function initMissionUI(){
+    const sel=document.getElementById('missionTheme');
+    sel.innerHTML=Object.entries(PHYLO_DATABASE).map(([k,v])=>`<option value="${k}">${esc(v.title)}</option>`).join('');
+    onThemeChange();
+  }
+  // 두 형질이 주어진 종집합에서 양립 가능한가? (서로소 또는 포함관계)
+  function compatTraits(a,b,sp){
+    const A=new Set(sp.filter(s=>s.has.includes(a)).map(s=>s.name));
+    const B=new Set(sp.filter(s=>s.has.includes(b)).map(s=>s.name));
+    const it=[...A].filter(x=>B.has(x)).length;
+    return it===0 || it===A.size || it===B.size;
+  }
+  function buildMission(themeKey, nSp, nTr){
+    const theme=PHYLO_DATABASE[themeKey]; if(!theme) return null;
+    const outs=theme.species.filter(s=>s.has.length===0);
+    const nonOut=theme.species.filter(s=>s.has.length>0);
+    nSp=Math.max(3, Math.min(nSp, theme.species.length));
+    for(let attempt=0; attempt<80; attempt++){
+      // 1) 종 선택: 외군 1개 + 나머지는 비외군에서
+      const chosen=[];
+      if(outs.length) chosen.push(outs[Math.floor(Math.random()*outs.length)]);
+      const pool=shuffleArr(nonOut.slice());
+      while(chosen.length<nSp && pool.length) chosen.push(pool.pop());
+      if(chosen.length<3) continue;
+      // 2) 유효 형질 합집합에서 그리디 호환 선택 → 항상 충돌 없는 트리
+      const U=[...new Set(chosen.flatMap(s=>s.has))];
+      if(U.length<2) continue;
+      const want=Math.max(2, Math.min(nTr, U.length));
+      const sel=[];
+      for(const t of shuffleArr(U.slice())){
+        if(sel.length>=want) break;
+        if(sel.every(s=>compatTraits(s,t,chosen))) sel.push(t);
+      }
+      if(sel.length<2) continue;
+      // 깊은 분기(많이 공유된 형질)부터 정렬 → 표가 보기 좋게
+      sel.sort((a,b)=> chosen.filter(s=>s.has.includes(b)).length - chosen.filter(s=>s.has.includes(a)).length);
+      // 3) 형질 제한해 종 구성 + 품질 검증
+      const built=chosen.map(s=>({name:s.name, has:s.has.filter(t=>sel.includes(t))}));
+      const hasOut=built.some(s=>s.has.length===0);
+      const informative=sel.filter(t=>{ const c=built.filter(s=>s.has.includes(t)).length; return c>0 && c<built.length; }).length;
+      const distinct=new Set(built.map(s=>s.has.slice().sort().join('|'))).size;
+      if(hasOut && informative>=2 && distinct>=3) return { traits:sel, species:built };
+    }
+    return null;
+  }
+  function generateMission(){
+    const key=document.getElementById('missionTheme').value;
+    const nSp=+document.getElementById('spRange').value, nTr=+document.getElementById('trRange').value;
+    const m=buildMission(key, nSp, nTr);
+    if(!m){ toast('⚠️ 조건에 맞는 미션을 못 만들었어요. 값을 조절해 다시 시도!'); return; }
+    // 깨끗한 자유 상태로 초기화 후 주입
+    appMode='free'; solved=false; solvedType=null; answerMatrix=null; submission=null; rotations={};
+    document.body.classList.remove('locked-mode');
+    traits=m.traits.slice();
+    species=m.species.map(s=>({name:s.name, has:new Set(s.has)}));
+    commit();
+    showView(3);
+    setTimeout(()=>{ const el=document.getElementById('matrixWrap'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 160);
+    toast(`🎲 새 미션: ${PHYLO_DATABASE[key].title} · 종 ${species.length} · 형질 ${traits.length} — 📤 공유로 도전 출제!`);
+  }
+
+/* ===================================================================
+   2. 영속성 + 공유 링크(모드 플래그/도장 포함)
+   =================================================================== */
+  function serialize(){ return { t:traits, s:species.map(sp=>({n:sp.name, h:traits.map(t=>sp.has.has(t)?1:0)})), r:rotations }; }
+  function deserialize(o){
+    traits=(o.t||[]).slice();
+    species=(o.s||[]).map(x=>({name:x.n, has:new Set(traits.filter((t,i)=> x.h && x.h[i]))}));
+    rotations=o.r||{};
+  }
+  // 도전/작도(잠금) 상태에서는 localStorage 자유데이터를 덮어쓰지 않는다
+  function saveLocal(){ if((appMode==='quiz'||appMode==='draw') && !solved) return; try{ localStorage.setItem(LS_KEY, JSON.stringify(serialize())); }catch(e){} }
+  function loadLocal(){ try{ const r=localStorage.getItem(LS_KEY); if(!r) return false; deserialize(JSON.parse(r)); return traits.length||species.length; }catch(e){ return false; } }
+
+  const b64enc = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+  const b64dec = b => new TextDecoder().decode(Uint8Array.from(atob(b), c=>c.charCodeAt(0)));
+  function encodeState(extra){
+    const json=JSON.stringify(Object.assign(serialize(), { mk:MAKER }, extra||{})); // 모든 공유 링크에 제작자 각인
+    if(window.LZString) return 'L'+LZString.compressToEncodedURIComponent(json);
+    return 'B'+encodeURIComponent(b64enc(json));
+  }
+  function decodeState(code){
+    try{
+      const tag=code[0], body=code.slice(1); let json;
+      if(tag==='L' && window.LZString) json=LZString.decompressFromEncodedURIComponent(body);
+      else if(tag==='B') json=b64dec(decodeURIComponent(body)); else return false;
+      if(!json) return false;
+      const p=JSON.parse(json); deserialize(p);
+      if(p.au) authorName=p.au;                  // 출제자 이름
+      if(p.m==='q'){ // 🎯 도전과제: 현재 표를 정답으로 스냅샷 → 표는 빈칸으로
+        appMode='quiz'; answerMatrix=species.map(s=>traits.map(t=>s.has.has(t)?1:0)); species.forEach(s=>s.has.clear());
+      } else if(p.m==='d'){ appMode='draw'; }    // 🌳 계통수 그리기: 표 고정
+      if(p.sub){ submission={ au:p.au||'', sv:p.sv||'', ty:p.ty||'' }; } // 📩 제출 링크
+      return true;
+    }catch(e){ return false; }
+  }
+  function shareURL(extra){ return location.href.split('#')[0].split('?')[0] + '#d=' + encodeState(extra); }
+  const makeQuizLink   = a  => shareURL(a ? {m:'q',au:a} : {m:'q'});
+  const makeDrawLink   = a  => shareURL(a ? {m:'d',au:a} : {m:'d'});
+  const makeSubmitLink = sv => shareURL({ sub:1, au:authorName||'', sv:sv||'', ty:solvedType||'' });
+
+/* ===================================================================
+   3. 칩 / 분석표 렌더 (+ 잠금/읽기전용 + 네온)
+   =================================================================== */
+  function renderTraitChips(){
+    const box=document.getElementById('traitChips'), lock=structureLocked();
+    box.innerHTML = traits.length
+      ? traits.map((t,j)=>`<span class="chip trait">${esc(t)}${lock?'':`<button class="del" onclick="removeTrait(${j})" aria-label="삭제">✕</button>`}</span>`).join('')
+      : '<div class="empty">아직 형질이 없습니다.</div>';
+  }
+  function renderSpeciesChips(){
+    const box=document.getElementById('speciesChips'), lock=structureLocked();
+    box.innerHTML = species.length
+      ? species.map((s,i)=>`<span class="chip sp">${esc(s.name)}${lock?'':`<button class="del" onclick="removeSpecies(${i})" aria-label="삭제">✕</button>`}</span>`).join('')
+      : '<div class="empty">아직 종이 없습니다.</div>';
+  }
+  function renderMatrix(){
+    const wrap=document.getElementById('matrixWrap');
+    if(!species.length || !traits.length){ wrap.innerHTML='<div class="empty">형질과 종을 각각 1개 이상 추가하면 분석표가 나타납니다.</div>'; return; }
+    const lock=structureLocked(), ro=cellsLocked();
+    const head='<tr><th style="cursor:default">종 \\ 형질</th>'+traits.map((t,j)=>{
+      const c=conflictTraits.has(t)?' conflict':'';
+      return `<th class="${c.trim()}" onclick="flashConflict(${j})">${esc(t)}${lock?'':`<button class="del" onclick="event.stopPropagation();removeTrait(${j})" title="형질 삭제">✕</button>`}</th>`;
+    }).join('')+'</tr>';
+    const rows=species.map((s,i)=>{
+      const out=s.has.size===0?'<span class="tag-out">외군</span>':'';
+      const cells=traits.map((t,j)=>{
+        const on=s.has.has(t), c=conflictTraits.has(t)?' conflict':'';
+        return ro
+          ? `<td class="cell ${on?'cell-o':'cell-x'} ro" data-j="${j}" onclick="flashConflict(${j})">${on?'O':'X'}</td>`
+          : `<td class="cell ${on?'cell-o':'cell-x'}${c}" data-i="${i}" data-j="${j}" onclick="toggleCell(${i},${j})" onmouseenter="hoverConflict(${j})" onmouseleave="clearNeon()">${on?'O':'X'}</td>`;
+      }).join('');
+      return `<tr><td class="name"><span class="name-wrap">${lock?'':`<button class="del" onclick="removeSpecies(${i})" title="종 삭제">✕</button>`}${esc(s.name)}${out}</span></td>${cells}</tr>`;
+    }).join('');
+    wrap.innerHTML=`<div class="table-scroll"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  // 잠금 UI 반영(입력/버튼 비활성 + 안내 배너)
+  function refreshLockUI(){
+    const lock=structureLocked();
+    ['traitInput','speciesInput','traitAddBtn','speciesAddBtn','exampleBtn','clearBtn'].forEach(id=>{ const e=document.getElementById(id); if(e) e.disabled=lock; });
+    const txt = appMode==='quiz' ? '🎯 도전과제 진행 중 — 빈칸을 정답대로 채우면 잠금이 풀립니다. (형질·종 구조는 잠김)'
+              : appMode==='draw' ? '🌳 계통수 작도 진행 중 — 계통수를 완성하면 잠금이 풀립니다. (표는 읽기 전용)'
+              : '';
+    document.querySelectorAll('.lockmsg').forEach(el=>{ el.style.display=lock?'block':'none'; if(lock) el.innerHTML='🔒 '+txt; });
+    const mb=document.getElementById('missionBox'); if(mb) mb.style.display=lock?'none':'block'; // 미션 생성기는 자유 모드에서만
+    document.body.classList.toggle('locked-mode', lock);
+  }
+
+  // 네온 충돌 강조
+  function conflictPartnerIdx(j){
+    const tj=traits[j], out=[], SA=new Set(species.filter(s=>s.has.has(tj)).map(s=>s.name));
+    if(!SA.size) return out;
+    for(let k=0;k<traits.length;k++){ if(k===j) continue;
+      const SB=new Set(species.filter(s=>s.has.has(traits[k])).map(s=>s.name));
+      const inter=[...SA].filter(x=>SB.has(x)).length;
+      if(inter>0 && inter!==SA.size && inter!==SB.size) out.push(k);
+    }
+    return out;
+  }
+  function clearNeon(){ document.querySelectorAll('#matrixWrap td.cell').forEach(td=>td.classList.remove('neon-a','neon-am','neon-b','neon-bm')); }
+  function setNeon(j){
+    clearNeon(); const partners=conflictPartnerIdx(j); if(!partners.length) return;
+    document.querySelectorAll('#matrixWrap td.cell').forEach(td=>{
+      const cj=+td.dataset.j, isO=td.classList.contains('cell-o');
+      if(cj===j) td.classList.add(isO?'neon-a':'neon-am');
+      else if(partners.includes(cj)) td.classList.add(isO?'neon-b':'neon-bm');
+    });
+  }
+  let neonTimer=null;
+  function hoverConflict(j){ setNeon(j); }
+  function flashConflict(j){ setNeon(j); clearTimeout(neonTimer); neonTimer=setTimeout(clearNeon,1900); }
+
+/* ===================================================================
+   4. 계통수 빌드 + 분석
+   =================================================================== */
+  function buildNode(group){
+    if(group.length===1) return { type:'leaf', name:group[0].name, has:group[0].has, syn:[] };
+    let best=null, bestCount=-1;
+    for(const t of traits){ const c=group.filter(g=>g.has.has(t)).length; if(c>0&&c<group.length&&c>bestCount){ best=t; bestCount=c; } }
+    if(best===null) return { type:'node', syn:[], children:group.map(g=>({type:'leaf',name:g.name,has:g.has,syn:[]})) };
+    const withG=group.filter(g=>g.has.has(best)), withoutG=group.filter(g=>!g.has.has(best));
+    const withNames=new Set(withG.map(g=>g.name));
+    const syn=traits.filter(t=>{ const m=group.filter(g=>g.has.has(t)); return m.length===withNames.size && m.every(g=>withNames.has(g.name)); });
+    const childWith=buildNode(withG); childWith.syn=syn;
+    return { type:'node', syn:[], children:[childWith, buildNode(withoutG)] };
+  }
+  function setSig(n){ if(!n.children||!n.children.length){ n.sig='L:'+n.name; return [n.name]; }
+    let lv=[]; n.children.forEach(c=>lv.push(...setSig(c))); n.sig=lv.slice().sort().join('|'); return lv; }
+  const ordered = n => rotations[n.sig] ? [...n.children].reverse() : n.children;
+  function parsimonyLength(root){
+    let total=0;
+    for(const t of traits){ (function fitch(n){
+      if(!n.children||!n.children.length) return new Set([ n.has.has(t)?1:0 ]);
+      let acc=null; for(const c of n.children){ const s=fitch(c);
+        if(acc===null){ acc=s; continue; } const inter=new Set([...acc].filter(x=>s.has(x)));
+        if(inter.size) acc=inter; else { total++; acc=new Set([...acc,...s]); } } return acc;
+    })(root); }
+    return total;
+  }
+  function analyzeConflicts(){
+    const involved=new Set(); let firstPair=null;
+    for(let a=0;a<traits.length;a++) for(let b=a+1;b<traits.length;b++){
+      const SA=new Set(species.filter(s=>s.has.has(traits[a])).map(s=>s.name));
+      const SB=new Set(species.filter(s=>s.has.has(traits[b])).map(s=>s.name));
+      const inter=[...SA].filter(x=>SB.has(x)).length;
+      if(inter===0||inter===SA.size||inter===SB.size) continue;
+      involved.add(traits[a]); involved.add(traits[b]); if(!firstPair) firstPair=[traits[a],traits[b]];
+    }
+    return { involved, firstPair };
+  }
+  // 분기(클레이드) 서명 수집: 크기 2 이상, 전체 미만
+  function collectClades(node, set, total){
+    if(!node.children||!node.children.length) return [node.name];
+    let lv=[]; node.children.forEach(c=>lv.push(...collectClades(c,set,total)));
+    if(lv.length>=2 && lv.length<total) set.add(lv.slice().sort().join('|'));
+    return lv;
+  }
+
+/* ===================================================================
+   5. 결과 렌더: 자동 계통수 / 계통수 그리기 빌더 분기
+   =================================================================== */
+  function renderTree(celebrate){
+    const need=document.getElementById('needData'), body=document.getElementById('resultBody');
+    const auto=document.getElementById('autoResult'), drawA=document.getElementById('drawArea');
+    document.getElementById('resultTitle').textContent = (appMode==='draw'&&!solved)?'계통수 그리기 도전'
+      : (appMode==='quiz'&&!solved)?'도전과제 · 임시 계통수' : '완성된 계통수';
+
+    if(species.length<2 || traits.length<1){ need.style.display='block'; body.style.display='none'; conflictTraits=new Set(); updateHUD(); return; }
+    need.style.display='none'; body.style.display='block';
+    renderSubmissionBadge();
+
+    // 🌳 계통수 그리기 모드 → 탭-합치기 빌더
+    if(appMode==='draw' && !solved){ auto.style.display='none'; drawA.style.display='block'; renderDrawBuilder(); return; }
+    drawA.style.display='none'; auto.style.display='block';
+    const quizUnsolved = appMode==='quiz' && !solved;   // 도전과제 미통과 → 틀린/임시 계통수
+
+    const taxa=species.map(s=>({name:s.name,has:s.has}));
+    const root=buildNode(taxa); setSig(root);
+    const plen=parsimonyLength(root), n=species.length;
+    const idealMin=traits.filter(t=>{ const c=species.filter(s=>s.has.has(t)).length; return c>0&&c<n; }).length;
+    const optimal=plen===idealMin && idealMin>0;
+    const { involved, firstPair }=analyzeConflicts(); conflictTraits=involved;
+
+    let maxDepth=0; (function setD(nn,d){ nn.depth=d; if(d>maxDepth)maxDepth=d; (nn.children||[]).forEach(c=>setD(c,d+1)); })(root,0);
+    let leafCount=0; (function cnt(nn){ (nn.children&&nn.children.length)?ordered(nn).forEach(cnt):leafCount++; })(root);
+    const ML=44,MT=66,rowH=86,plotW=540,labelW=250, xTip=ML+plotW, W=xTip+labelW, H=MT+(leafCount-1)*rowH+MT;
+    const stepX=maxDepth>0?plotW/maxDepth:plotW;
+    let yi=0;
+    (function assign(nn){ if(!nn.children||!nn.children.length){ nn.x=xTip; nn.y=MT+(yi++)*rowH; return; }
+      ordered(nn).forEach(assign); const ys=nn.children.map(c=>c.y); nn.y=(Math.min(...ys)+Math.max(...ys))/2; nn.x=ML+nn.depth*stepX; })(root);
+
+    const P=[]; currentNodeSigs=[];
+    const line=(x1,y1,x2,y2,d)=>`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" class="branch" style="animation-delay:${(d*0.12).toFixed(2)}s"/>`;
+    function synBadges(x1,x2,y,arr,d){ const cx=(x1+x2)/2; let s=`<circle cx="${cx.toFixed(1)}" cy="${y.toFixed(1)}" r="9" class="syn-mark fade" style="animation-delay:${(d*0.12+0.45).toFixed(2)}s"/>`;
+      arr.forEach((t,k)=>{ const fs=23,padX=13,w=t.length*fs*1.02+padX*2,cy=y-24-k*38;
+        s+=`<g class="fade" style="animation-delay:${(d*0.12+0.55+k*0.08).toFixed(2)}s"><rect x="${(cx-w/2).toFixed(1)}" y="${(cy-fs*0.95).toFixed(1)}" width="${w.toFixed(1)}" height="${(fs*1.65).toFixed(1)}" rx="${(fs*0.85).toFixed(1)}" class="syn-pill"/><text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" class="syn-label" text-anchor="middle" dominant-baseline="middle">${esc(t)}</text></g>`; });
+      return s; }
+    function drawNode(nn){
+      if(nn.children&&nn.children.length){
+        const kids=ordered(nn), ys=kids.map(c=>c.y);
+        P.push(line(nn.x,Math.min(...ys),nn.x,Math.max(...ys),nn.depth));
+        kids.forEach(c=>{ P.push(line(nn.x,c.y,c.x,c.y,c.depth)); if(c.syn&&c.syn.length) P.push(synBadges(nn.x,c.x,c.y,c.syn,c.depth)); drawNode(c); });
+        if(kids.length>=2){ const idx=currentNodeSigs.length; currentNodeSigs.push(nn.sig);
+          P.push(`<g class="nodeg" onclick="rotate(${idx})"><title>가지 회전</title><circle cx="${nn.x}" cy="${nn.y.toFixed(1)}" r="7" class="node-dot fade" style="animation-delay:${(nn.depth*0.12+0.3).toFixed(2)}s"/><circle cx="${nn.x}" cy="${nn.y.toFixed(1)}" r="20" class="node-hit"/></g>`); }
+      } else {
+        const isOut=nn.has&&nn.has.size===0, dly=(nn.depth*0.12+0.5).toFixed(2);
+        P.push(`<circle cx="${nn.x}" cy="${nn.y.toFixed(1)}" r="7.5" class="tip-dot fade" style="animation-delay:${dly}s"/>`);
+        P.push(`<g class="fade" style="animation-delay:${dly}s"><text x="${nn.x+20}" y="${nn.y.toFixed(1)}" class="tip-label" dominant-baseline="middle">${esc(nn.name)}</text>`+(isOut?`<text x="${nn.x+20}" y="${(nn.y+26).toFixed(1)}" class="tip-out" dominant-baseline="middle">외군 (outgroup)</text>`:``)+`</g>`);
+      }
+    }
+    P.push(`<text x="${ML-8}" y="${(root.y-16).toFixed(1)}" class="root-cap fade" style="animation-delay:.2s">공통 조상</text>`);
+    P.push(line(ML-22,root.y,root.x,root.y,0)); drawNode(root);
+    document.getElementById('treeBox').innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="계통수">${P.join('')}</svg>`;
+
+    const banner=document.getElementById('banner');
+    if(quizUnsolved){
+      // 도전과제 미통과: 축하 대신 '아쉬움' + 다시 맞추라는 경고
+      const q=quizProgress(), prog=q.ones>0?Math.round(Math.max(0,(q.ones-q.mismatch)/q.ones)*100):100;
+      document.getElementById('scoreCard').innerHTML=
+        `<div class="dash"><div class="dash-row"><div class="dash-cost"><span class="dc-num">${q.mismatch}</span><span class="dc-lab">남은 오답 칸 🎯</span></div>
+           <div class="dash-verd warn">아직 정답 아님</div></div>
+           <div class="dash-gauge"><div class="dg-fill" style="width:${prog}%"></div></div>
+           <div class="dash-sub">이 계통수는 현재 분석표로 그린 <b>임시 결과</b>예요. 정답 O를 정확히 배치해 남은 칸을 0으로 만드세요. (현재 ${q.match}/${q.total}칸 일치)</div></div>`;
+      banner.innerHTML=`<div class="banner info">😢 아직 정답이 아니에요 — 위 계통수는 <b>틀린/미완성 분석표</b>로 그려졌어요. <button class="link" onclick="showView(3)">분석표 다시 맞추기 →</button></div>`;
+    } else {
+      const pct=plen>0?Math.round(Math.min(100,idealMin/plen*100)):100;
+      document.getElementById('scoreCard').innerHTML=
+        `<div class="dash"><div class="dash-row"><div class="dash-cost"><span class="dc-num">${plen}</span><span class="dc-lab">진화 비용 ⚡</span></div>
+           <div class="dash-verd ${optimal?'best':'warn'}">${optimal?'🏆 최적!':'최적까지 '+(plen-idealMin)+'단계'}</div></div>
+           <div class="dash-gauge"><div class="dg-fill ${optimal?'best':''}" style="width:${pct}%"></div></div>
+           <div class="dash-sub">현재 변화 ${plen}회 · 이론상 최소 ${idealMin}회${optimal?' · 호모플라시 0 🎉':' · 중복 진화 '+(plen-idealMin)+'회'}</div></div>`;
+      if(firstPair) banner.innerHTML=`<div class="banner info">⚠️ <b>「${esc(firstPair[0])}」</b>와 <b>「${esc(firstPair[1])}」</b>가 겹치지만 포함관계가 아닙니다 — 수렴·평행진화 가능성. 충돌 형질을 표에서 노란색으로 표시했습니다. <button class="link" onclick="showView(3)">표에서 보기 →</button></div>`;
+      else { const outs=species.filter(s=>s.has.size===0).map(s=>s.name); banner.innerHTML=`<div class="banner ok">✅ 모든 형질이 깔끔하게 중첩됩니다${outs.length?` · 외군: <b>${esc(outs.join(', '))}</b>`:''}.</div>`; }
+    }
+
+    renderMatrix(); updateHUD();
+    if(celebrate){ quizUnsolved ? failEffect() : celebrate_(); }
+  }
+  function rotate(idx){ const sig=currentNodeSigs[idx]; if(!sig) return; rotations[sig]=!rotations[sig]; saveLocal(); renderTree(false); }
+  function celebrate_(){ if(!window.confetti) return;
+    const base={ particleCount:80, spread:72, ticks:200, colors:['#064e3b','#14b8a6','#f59e0b','#34d399','#a7f3d0'] };
+    window.confetti({ ...base, origin:{x:.2,y:.65} }); window.confetti({ ...base, origin:{x:.8,y:.65} }); }
+  // 오답 실패 이펙트: 붉은 프레임 펄스 + 결과 카드 흔들림 + 안내 토스트
+  function failEffect(){
+    const f=document.getElementById('failFrame'); f.style.display='none'; void f.offsetWidth; f.style.display='block'; setTimeout(()=>f.style.display='none',900);
+    const card=document.querySelector('#view-4 .card'); if(card){ card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); }
+    toast('😢 아쉽지만 정답이 아니에요. 분석표를 다시 맞춰보세요!');
+  }
+
+/* ===================================================================
+   6. 🎯 도전과제(정답 매칭)
+   =================================================================== */
+  function quizProgress(){
+    if(!answerMatrix) return {match:0,total:0,mismatch:0,ones:0};
+    let match=0,total=0,ones=0;
+    species.forEach((s,i)=>traits.forEach((t,j)=>{ total++; const a=answerMatrix[i]?answerMatrix[i][j]:0; const v=s.has.has(t)?1:0;
+      if(a===1) ones++; if(v===a) match++; }));
+    // ones = 정답에서 O인 칸 수(= 빈칸 시작 시 틀린 칸 수). 진행도 기준점.
+    return {match,total,mismatch:total-match,ones};
+  }
+  function checkQuiz(){ if(appMode!=='quiz'||solved||!answerMatrix) return;
+    const {match,total}=quizProgress(); if(total>0 && match===total) onSolved('quiz'); }
+
+/* ===================================================================
+   7. 🌳 계통수 그리기 (탭-합치기 빌더)
+   =================================================================== */
+  function computeAnswerClades(){ const total=species.length, set=new Set();
+    collectClades(buildNode(species.map(s=>({name:s.name,has:s.has}))), set, total); return set; }
+  function shuffleArr(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+  function freshGroups(){ return shuffleArr(species.map(s=>({leaves:[s.name], node:{type:'leaf',name:s.name}}))); }
+  function initDraw(){
+    drawGroups=freshGroups();   // 종 배열을 랜덤하게 — 표 순서대로 두면 너무 쉬움
+    drawSelected=-1; drawHistory=[]; answerCladeSet=computeAnswerClades();
+  }
+  function renderClade(node){
+    if(!node.children||!node.children.length) return `<span class="leafchip">${esc(node.name)}</span>`;
+    return `<div class="clade"><div class="bracket"></div><div class="kids">${node.children.map(renderClade).join('')}</div></div>`;
+  }
+  function renderDrawBuilder(){
+    if(!answerCladeSet) initDraw();
+    const total=species.length, created=new Set();
+    drawGroups.forEach(g=>collectClades(g.node, created, total));
+    const correct=[...created].filter(c=>answerCladeSet.has(c)).length, wrong=created.size-correct, M=answerCladeSet.size;
+    const cards=drawGroups.map((g,i)=>`<div class="groupcard ${i===drawSelected?'sel':''}" onclick="drawTap(${i})">${renderClade(g.node)}</div>`).join('');
+    document.getElementById('drawArea').innerHTML=
+      `<div class="banner info">🌳 주어진 표(형질 유무)로 <b>계통수를 직접 작도</b>하세요. 두 묶음을 차례로 <b>탭</b>하면 자매군으로 합쳐집니다. ${total}종을 모두 합쳐 하나의 트리로 만드세요.</div>
+       <div class="draw-feed">맞은 분기 <b>${correct}</b> / ${M}${wrong?` · <span style="color:var(--x)">잘못된 묶음 ${wrong}개</span>`:''}${drawGroups.length>1?` · 남은 묶음 ${drawGroups.length}`:''}</div>
+       <div class="draw-tray">${cards}</div>
+       <div class="toolbar">
+         <button class="btn btn-ghost" onclick="drawUndo()" ${drawHistory.length?'':'disabled'}>↩ 되돌리기</button>
+         <button class="btn btn-ghost" onclick="drawReset()">⟳ 처음부터</button>
+       </div>`;
+    updateHUD();
+  }
+  function drawTap(i){
+    if(drawSelected===-1){ drawSelected=i; renderDrawBuilder(); return; }
+    if(drawSelected===i){ drawSelected=-1; renderDrawBuilder(); return; }
+    const a=drawGroups[drawSelected], b=drawGroups[i];
+    drawHistory.push(drawGroups.slice());
+    const merged={ leaves:[...a.leaves,...b.leaves], node:{type:'node', children:[a.node, b.node]} };
+    drawGroups=drawGroups.filter((_,k)=>k!==drawSelected && k!==i); drawGroups.push(merged);
+    drawSelected=-1; checkDraw();
+  }
+  function drawUndo(){ if(!drawHistory.length) return; drawGroups=drawHistory.pop(); drawSelected=-1; renderDrawBuilder(); }
+  function drawReset(){ drawHistory=[]; drawGroups=freshGroups(); drawSelected=-1; renderDrawBuilder(); }
+  function checkDraw(){
+    const total=species.length;
+    if(drawGroups.length===1){
+      const created=new Set(); collectClades(drawGroups[0].node, created, total);
+      const equal = created.size===answerCladeSet.size && [...created].every(c=>answerCladeSet.has(c));
+      if(equal){ onSolved('draw'); return; }
+      renderDrawBuilder(); toast('❌ 최적 계통수가 아니에요. 되돌리기로 다시 시도!'); return;
+    }
+    renderDrawBuilder();
+  }
+
+/* ===================================================================
+   8. 진행 HUD + 통과 처리
+   =================================================================== */
+  function updateHUD(){
+    const hud=document.getElementById('hud');
+    const active=(appMode==='quiz'||appMode==='draw') && !solved;
+    if(!active){ hud.style.display='none'; return; }
+    hud.style.display='flex';
+    const icEl=hud.querySelector('.hud-ic'), numEl=hud.querySelector('.hud-num'),
+          labEl=hud.querySelector('.hud-lab'), fill=hud.querySelector('.hud-fill'), tgt=hud.querySelector('.hud-target');
+    if(appMode==='quiz'){
+      const q=quizProgress(), prog=q.ones>0?Math.max(0,(q.ones-q.mismatch)/q.ones):1;
+      icEl.textContent='🎯'; labEl.textContent='남은 오답 칸'; numEl.textContent=q.mismatch;
+      fill.style.width=(prog*100)+'%'; fill.classList.toggle('best', q.mismatch===0);
+      tgt.innerHTML='0이면 <b>통과</b>';
+    } else {
+      const total=species.length, created=new Set(); (drawGroups||[]).forEach(g=>collectClades(g.node,created,total));
+      const M=answerCladeSet?answerCladeSet.size:0, correct=answerCladeSet?[...created].filter(c=>answerCladeSet.has(c)).length:0;
+      icEl.textContent='🌳'; labEl.textContent='맞은 분기'; numEl.textContent=correct;
+      fill.style.width=(M?correct/M*100:0)+'%'; fill.classList.toggle('best', M>0&&correct===M);
+      tgt.innerHTML='전체 <b>'+M+'</b>';
+    }
+  }
+  function onSolved(mode){
+    if(solved) return;
+    solved=true; solvedType=mode; appMode='free'; answerMatrix=null;
+    refreshLockUI(); saveLocal();
+    const frame=document.getElementById('goldFrame'); frame.style.display='block'; setTimeout(()=>frame.style.display='none',2600);
+    celebrate_(); setTimeout(celebrate_,260);
+    const msg = mode==='quiz' ? '형질 분석 정답! 표를 완벽히 맞혔어요.' : '계통수 작도 성공! 최적 트리를 직접 완성했어요.';
+    openModal(`<div style="text-align:center"><div style="font-size:56px;line-height:1">🏆</div>
+      <h3 style="font-size:22px;margin-top:6px">통과!</h3>
+      <p class="hint">${msg}<br>이제 <b>표·종·형질·계통수를 자유롭게 수정</b>할 수 있어요.</p>
+      <button class="btn btn-add" style="width:100%" onclick="closeModal(); afterSolve()">자유 편집 시작 ✏️</button>
+      <button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="closeModal(); afterSolve(); openShare(); setShareType('submit')">📩 이름 적고 제출하기</button></div>`);
+  }
+  function afterSolve(){ updateHUD(); renderTraitChips(); renderSpeciesChips(); renderMatrix(); showView(4); }
+
+/* ===================================================================
+   9. 제출(Submission) — 출제자/풀이자 이름 + 완료 유형 스탬프
+   =================================================================== */
+  function renderSubmissionBadge(){
+    const el=document.getElementById('feedbackBadge');
+    if(submission){ el.style.display='flex';
+      el.innerHTML=`📩 제출 확인 · 출제자 <b>${esc(submission.au||'?')}</b> · 풀이자 <b>${esc(submission.sv||'?')}</b> · ${TYPE_LABEL[submission.ty]||submission.ty||'과제'} 완료 ✅`;
+    } else el.style.display='none';
+  }
+
+/* ===================================================================
+   10. 뷰 전환 / 모달 / 공유 / 토스트
+   =================================================================== */
+  function showView(n){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+n).classList.add('active');
+    document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('on'));
+    document.getElementById('nav-'+n).classList.add('on');
+    window.scrollTo({top:0,behavior:'smooth'});
+    if(n===4) renderTree(true);
+  }
+  function openModal(html){ document.getElementById('modal-root').innerHTML=
+    `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="position:relative">
+      <button class="icon-btn" style="position:absolute;top:12px;right:12px;width:34px;height:34px" onclick="closeModal()">✕</button>${html}</div></div>`; }
+  function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+  function qrSvg(url){ try{ if(window.qrcode){ const qr=qrcode(0,'M'); qr.addData(url); qr.make(); return qr.createSvgTag({cellSize:5,margin:2,scalable:true}); } }catch(e){}
+    return '<div class="hint" style="text-align:center">QR을 만들 수 없어요. 링크를 복사해 주세요.</div>'; }
+
+  let curShareType='quiz';
+  function setShareType(t){
+    curShareType=t;
+    const aRow=document.getElementById('authorRow'), sRow=document.getElementById('solverRow');
+    aRow.style.display=(t==='quiz'||t==='draw')?'flex':'none';
+    sRow.style.display=(t==='submit')?'flex':'none';
+    const aEl=document.getElementById('shAuthor'), sEl=document.getElementById('shSolver');
+    if(aEl) authorName=aEl.value.trim();
+    if(sEl) solverName=sEl.value.trim();
+    document.querySelectorAll('.share-type').forEach(b=>b.classList.toggle('on', b.dataset.t===t));
+    const hasConflict = analyzeConflicts().firstPair!=null;
+    let url='', html='';
+    if(t==='quiz'){ url=makeQuizLink(authorName); html='🎯 <b>도전과제</b> — 지금 표가 <b>정답</b>으로 숨겨지고, 받는 사람은 빈 표를 채워 <b>정답과 똑같이</b> 맞혀야 통과합니다. <b>출제자 이름</b>을 적어 보내면 제출 시 함께 기록됩니다.'; }
+    else if(t==='draw'){ url=makeDrawLink(authorName); html='🌳 <b>계통수 그리기</b> — 표를 <b>고정</b>하고, 받는 사람이 계통수를 직접 작도해 최적 트리를 맞혀야 통과합니다. <b>출제자 이름</b>을 적어 보내세요.'+(hasConflict?' <span style="color:var(--x)">⚠️ 표에 충돌이 있어 정답 트리가 모호할 수 있어요.</span>':''); }
+    else if(t==='submit'){
+      if(!solved || !solvedType){ html='📩 <b>제출용</b> — 받은 <b>도전과제/계통수 그리기를 먼저 완료</b>해야 제출 링크를 만들 수 있어요.'; url=''; }
+      else { url=makeSubmitLink(solverName); html=`📩 <b>제출용</b> — 출제자 <b>${esc(authorName||'?')}</b> 의 ${TYPE_LABEL[solvedType]} 을(를) <b>${esc(solverName||'(이름 입력)')}</b> 가 완료했다는 제출 링크. 출제자·선생님께 보내세요.`; }
+    }
+    document.getElementById('shareDesc').innerHTML=html;
+    const urlEl=document.getElementById('shareUrl'); urlEl.value=url; urlEl.placeholder=url?'':'(완료 후 생성됩니다)';
+    document.getElementById('qrSlot').innerHTML = url?qrSvg(url):'<div class="hint" style="text-align:center">링크가 아직 없어요.</div>';
+  }
+  function refreshShareLink(){ setShareType(curShareType); }
+  function openShare(){
+    openModal(`<h3>📤 공유하기</h3>
+      <div class="share-types">
+        <button class="btn btn-ghost share-type" data-t="quiz" onclick="setShareType('quiz')">🎯 도전과제</button>
+        <button class="btn btn-ghost share-type" data-t="draw" onclick="setShareType('draw')">🌳 계통수 그리기</button>
+        <button class="btn btn-ghost share-type" data-t="submit" onclick="setShareType('submit')">📩 제출용</button>
+      </div>
+      <div id="authorRow" class="row" style="display:none;margin:4px 0"><input id="shAuthor" type="text" placeholder="출제자 이름 (예: 조현우)" maxlength="20" value="${esc(authorName)}" oninput="refreshShareLink()"></div>
+      <div id="solverRow" class="row" style="display:none;margin:4px 0"><input id="shSolver" type="text" placeholder="풀이자(내) 이름 입력" maxlength="20" value="${esc(solverName)}" oninput="refreshShareLink()"></div>
+      <p id="shareDesc" class="hint"></p>
+      <div id="qrSlot" class="qr-wrap"></div>
+      <div class="row" style="margin-top:14px"><input id="shareUrl" type="text" readonly onclick="this.select()"><button class="btn btn-add" onclick="copyShare()">복사</button></div>
+      <div id="copyMsg" class="hint" style="text-align:center;margin-top:8px"></div>`);
+    setShareType('quiz');
+  }
+  function copyShare(){ const inp=document.getElementById('shareUrl'), msg=document.getElementById('copyMsg');
+    const done=()=> msg.textContent='✅ 링크를 복사했어요!';
+    if(navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done, ()=>{inp.select();document.execCommand('copy');done();});
+    else { inp.select(); document.execCommand('copy'); done(); } }
+  function toast(html){ const d=document.createElement('div'); d.className='toast'; d.innerHTML=html; document.body.appendChild(d); setTimeout(()=>d.remove(),3600); }
+
+/* ===================================================================
+   11. 진입 안내 모달 / 도움말
+   =================================================================== */
+  function openHelp(){
+    openModal(`<h3>❓ 도움말 · 계통수 랩</h3>
+      <p class="hint" style="margin-bottom:10px">① 형질 → ② 종 → ③ 분석표(O/X) → ④ 계통수 자동 완성. 📤로 친구에게 <b>도전과제 / 계통수 그리기</b>를 내고(출제자 이름 기입), 풀이자는 완료 후 <b>📩 제출용</b>으로 자기 이름을 적어 제출합니다.</p>
+      <div class="banner info">⚖️ <b>현재는 ‘엄격한 채점’ 버전입니다.</b><br>· 계통수 그리기 → 프로그램이 계산한 <b>유일한 정답 트리</b>와 정확히 일치해야 통과<br>· 도전과제 → 출제자 표와 <b>완전히 동일</b>해야 통과<br><br>표에 충돌(수렴진화)이 있으면 똑같이 최적인 트리가 여러 개일 수 있어, 향후 <b>‘느슨한 채점’(최소 변화를 달성하는 모든 트리 허용)</b> 으로 바꾸는 것도 고려 중입니다.</div>
+      <button class="btn btn-add" style="width:100%;margin-top:12px" onclick="closeModal(); startTour()">📖 사용 가이드 다시 보기</button>`);
+  }
+  function submissionIntro(){ openModal(`<div style="text-align:center"><div style="font-size:48px">📩</div>
+    <h3>제출이 도착했어요!</h3>
+    <p class="hint">출제자 <b>${esc(submission.au||'?')}</b> 의 ${TYPE_LABEL[submission.ty]||'과제'}를<br>풀이자 <b>${esc(submission.sv||'?')}</b> 님이 완료했습니다. ✅<br>아래에서 제출한 표와 계통수를 확인하세요.</p>
+    <button class="btn btn-add" style="width:100%" onclick="closeModal(); showView(4)">제출 결과 보기 →</button></div>`); }
+  function quizIntro(){ openModal(`<div style="text-align:center"><div style="font-size:48px">🎯</div>
+    <h3>형질 분석 도전!</h3>
+    <p class="hint">출제자가 낸 표를 똑같이 맞혀보세요. 각 생물이 가진 형질 칸을 <b>O</b>로 정확히 채우면 잠금이 풀려 자유 편집 권한을 얻습니다. 하단 게이지로 진행도를 확인하세요.</p>
+    <button class="btn btn-add" style="width:100%" onclick="closeModal(); showView(3)">도전 시작 🚀</button></div>`); }
+  function drawIntro(){ openModal(`<div style="text-align:center"><div style="font-size:48px">🌳</div>
+    <h3>계통수 그리기 도전!</h3>
+    <p class="hint">표는 고정되어 있어요. 주어진 형질 정보로 <b>계통수를 직접 작도</b>하세요. 두 묶음을 차례로 탭하면 자매군으로 합쳐집니다. 최적 트리를 완성하면 자유 편집 권한을 얻습니다.</p>
+    <button class="btn btn-add" style="width:100%" onclick="closeModal(); showView(4)">작도 시작 ✏️</button></div>`); }
+
+/* ===================================================================
+   12. 첫 방문 가이드 투어
+   =================================================================== */
+  const TOUR=[
+    { sel:'#nav-0', text:'🏠 <b>시작</b>에서 직접 만들지, 무작위로 뽑을지 고릅니다.' },
+    { sel:'#nav-1', text:'① 직접 만들기 → 진화하며 새로 생긴 <b>형질</b>을 추가해요.' },
+    { sel:'#nav-2', text:'② 분석할 <b>생물(종)</b>을 추가해요. 형질이 없는 종은 외군이 됩니다.' },
+    { sel:'#nav-3', text:'③ <b>분석표</b>에서 각 생물이 가진 형질을 O로 표시해요.' },
+    { sel:'#nav-4', text:'④ <b>계통수</b>가 자동 완성! 분기점 회전·파시모니 점수도 확인해요.' },
+    { sel:'#shareBtn', text:'📤로 <b>도전과제·계통수 그리기·검증</b> 링크를 만들어 친구에게 보낼 수 있어요.' },
+  ];
+  let tourIdx=0;
+  function startTour(){ tourIdx=0; showTourStep(); }
+  function endTour(){ document.getElementById('modal-root').innerHTML=''; try{ localStorage.setItem(TOUR_KEY,'1'); }catch(e){} }
+  function nextTour(){ tourIdx++; (tourIdx>=TOUR.length)?endTour():showTourStep(); }
+  function showTourStep(){
+    const step=TOUR[tourIdx], el=document.querySelector(step.sel); if(!el){ nextTour(); return; }
+    const r=el.getBoundingClientRect(), pad=8, below=r.top<window.innerHeight*0.5;
+    const tipStyle=below?`top:${(r.bottom+pad+10)}px;`:`bottom:${(window.innerHeight-r.top+pad+10)}px;`;
+    const left=Math.max(12, Math.min(window.innerWidth-12-Math.min(290,window.innerWidth*0.86), r.left+r.width/2-145));
+    document.getElementById('modal-root').innerHTML=
+      `<div class="tour-mask" onclick="nextTour()"></div>
+       <div class="tour-hole" style="left:${r.left-pad}px;top:${r.top-pad}px;width:${r.width+pad*2}px;height:${r.height+pad*2}px"></div>
+       <div class="tour-tip" style="left:${left}px;${tipStyle}"><div class="tour-step">STEP ${tourIdx+1} / ${TOUR.length}</div><p>${step.text}</p>
+         <div class="row"><button class="btn btn-ghost" onclick="endTour()">건너뛰기</button>
+         <button class="btn btn-add" onclick="nextTour()">${tourIdx===TOUR.length-1?'시작하기 🚀':'다음 →'}</button></div></div>`;
+  }
+
+/* ===================================================================
+   13. 초기화 — URL/모드 라우팅
+   =================================================================== */
+  function bindEnter(){
+    document.getElementById('traitInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addTrait(); });
+    document.getElementById('speciesInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addSpecies(); });
+  }
+  function init(){
+    bindEnter();
+    renderCredit();
+    initMissionUI();
+    let loaded=false;
+    if(location.hash.startsWith('#d=')) loaded=decodeState(location.hash.slice(3));
+    if(!loaded) loaded=loadLocal();
+    if(!loaded || (!traits.length && !species.length)){ if(appMode==='free') loadExample(); }
+    renderTraitChips(); renderSpeciesChips(); renderMatrix();
+    if(appMode==='draw') initDraw();
+    refreshLockUI(); updateHUD();
+    // 모드별 진입 화면: 도전/작도/제출은 해당 화면으로, 자유 모드는 시작(분기 선택) 화면
+    if(submission){ showView(4); setTimeout(()=>{ submissionIntro(); celebrate_(); }, 300); }
+    else if(appMode==='quiz'){ showView(3); quizIntro(); }
+    else if(appMode==='draw'){ showView(4); drawIntro(); }
+    else showView(0);
+  }
+
+  Object.assign(window, { addTrait, removeTrait, addSpecies, removeSpecies, toggleCell, loadExample, clearAll,
+    showView, rotate, openShare, setShareType, refreshShareLink, copyShare, closeModal, openHelp, hoverConflict, clearNeon, flashConflict,
+    drawTap, drawUndo, drawReset, afterSolve, startTour, endTour, nextTour, generateMission, onThemeChange });
+
+  document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
