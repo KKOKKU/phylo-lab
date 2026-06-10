@@ -117,7 +117,7 @@
   tbody tr:nth-child(even) td.name{ background:#fafcfe; }
   .cell{ cursor:pointer; user-select:none; font-weight:800; font-size:18px; width:60px; height:54px;
     text-align:center; border-bottom:1px solid var(--line); transition:background .12s, color .12s; }
-  .cell-o{ background:var(--o-soft); color:var(--o); } .cell-x{ background:#fff; color:#cbd5e1; }
+  .cell-o{ background:var(--o-soft); color:var(--o); } .cell-x{ background:#fff; color:#cbd5e1; } .cell-q{ background:var(--accent-soft); color:var(--accent-ink); }
   .cell.conflict{ box-shadow:inset 0 0 0 2px rgba(245,158,11,.45); }
   .cell:active{ filter:brightness(.93); } .cell.ro{ cursor:default; }
   .del{ border:none; background:#f1f5f9; color:#94a3b8; width:21px; height:21px; border-radius:50%;
@@ -328,7 +328,16 @@
         <div class="mission-row"><label>테마</label><select id="missionTheme" onchange="onThemeChange()"></select></div>
         <div class="mission-row"><label>종 개수 <b id="spVal">6</b></label><input type="range" id="spRange" min="3" max="11" value="6" oninput="document.getElementById('spVal').textContent=this.value"></div>
         <div class="mission-row"><label>형질 개수 <b id="trVal">4</b></label><input type="range" id="trRange" min="2" max="8" value="4" oninput="document.getElementById('trVal').textContent=this.value"></div>
-        <button class="btn btn-add" style="width:100%" onclick="generateMission()">미션 생성 🔥</button>
+        <div class="mission-row" style="margin-top: 6px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 140px; font-size: 13px; font-weight: 800; color: #334155;">
+            <input type="checkbox" id="fossilModeCheck" onchange="toggleFossilSlider()" style="width: 16px; height: 16px; accent-color: var(--secondary);"> 화석 추론 모드
+          </label>
+        </div>
+        <div class="mission-row" id="fossilRatioRow" style="display: none;">
+          <label>결실 비율 <b id="fossilVal">30%</b></label>
+          <input type="range" id="fossilRange" min="10" max="70" step="5" value="30" oninput="document.getElementById('fossilVal').textContent=this.value+'%'">
+        </div>
+        <button class="btn btn-add" style="width:100%; margin-top: 8px;" onclick="generateMission()">미션 생성 🔥</button>
       </div>
       <p class="maker-credit" style="text-align:center;color:var(--muted);font-size:11.5px;margin:18px 0 2px"></p>
     </div>
@@ -373,6 +382,13 @@
       <div class="card-h"><span class="badge">3</span><h2>형질 분석표</h2></div>
       <div class="lockmsg"></div>
       <p class="hint">각 생물이 가진 형질 칸을 터치해 <b style="color:var(--o)">O</b>(있음)로 바꾸세요. 충돌(노란) 형질 머리글을 누르면 <b>양립 불가한 칸들이 네온으로 깜빡</b>입니다.</p>
+      <div class="row" style="margin-bottom: 12px; align-items: center; gap: 8px;">
+        <label for="analysisModelSelect" style="font-size: 13.5px; font-weight: 800; color: var(--muted); white-space: nowrap;">분석 모델:</label>
+        <select id="analysisModelSelect" onchange="changeAnalysisModel(this.value)" style="max-width: 320px; padding: 10px 11px; border: 1.5px solid var(--line); border-radius: 11px; font-size: 14px; font-weight: 700; background: #fff; color: var(--ink);">
+          <option value="parsimony">최대 파시모니 (Maximum Parsimony)</option>
+          <option value="upgma">거리 분석 (Distance Analysis (UPGMA))</option>
+        </select>
+      </div>
       <div id="matrixWrap"></div>
       <div class="toolbar">
         <button id="exampleBtn" class="btn btn-ghost" onclick="loadExample()">📚 예시 불러오기</button>
@@ -448,6 +464,7 @@
   let conflictTraits = new Set();
 
   let appMode = 'free';            // 'free' | 'quiz' | 'draw'
+  let analysisModel = 'parsimony'; // 'parsimony' | 'upgma'
   let solved = false;              // 도전/작도 통과 여부
   let solvedType = null;           // 통과한 유형: 'quiz' | 'draw'
   let answerMatrix = null;         // quiz 정답 (species×traits 0/1)
@@ -462,7 +479,7 @@
 
   const LS_KEY = 'phylo_lab_v4';
   const TOUR_KEY = 'phylo_lab_tour_done';
-  const TYPE_LABEL = { quiz:'🎯 도전과제', draw:'🌳 계통수 그리기' };
+  const TYPE_LABEL = { quiz:'🎯 도전과제', draw:'🌳 계통수 그리기', fossil:'🦖 화석 추론' };
   const EXAMPLE = { t:["척추","턱","네 다리","양막(알)","털"],
     s:[ ["창고기",[]], ["칠성장어",["척추"]], ["참치",["척추","턱"]], ["도롱뇽",["척추","턱","네 다리"]],
         ["거북",["척추","턱","네 다리","양막(알)"]], ["표범",["척추","턱","네 다리","양막(알)","털"]] ] };
@@ -520,7 +537,7 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   // 잠금 권한
-  const structureLocked = () => (appMode==='quiz' || appMode==='draw') && !solved; // 형질·종 구조 변경 금지
+  const structureLocked = () => (appMode==='quiz' || appMode==='draw' || appMode==='fossil') && !solved; // 형질·종 구조 변경 금지
   const cellsLocked     = () => appMode==='draw' && !solved;                        // 표 칸 토글 금지(읽기전용)
 
 /* ===================================================================
@@ -535,14 +552,32 @@
     const el=document.getElementById('traitInput'), v=el.value.trim();
     if(!v || traits.includes(v)){ el.value=''; return; }
     traits.push(v); el.value=''; el.focus(); commit(); }
-  function removeTrait(j){ if(structureLocked()) return; const name=traits[j]; traits.splice(j,1); species.forEach(s=>s.has.delete(name)); commit(); }
+  function removeTrait(j){ if(structureLocked()) return; const name=traits[j]; traits.splice(j,1); species.forEach(s=>{ s.has.delete(name); if(s.unknown) s.unknown.delete(name); }); commit(); }
   function addSpecies(){ if(structureLocked()) return;
     const el=document.getElementById('speciesInput'), v=el.value.trim();
     if(!v || species.some(s=>s.name===v)){ el.value=''; return; }
-    species.push({name:v, has:new Set()}); el.value=''; el.focus(); commit(); }
+    species.push({name:v, has:new Set(), unknown:new Set()}); el.value=''; el.focus(); commit(); }
   function removeSpecies(i){ if(structureLocked()) return; species.splice(i,1); commit(); }
-  function toggleCell(i,j){ if(cellsLocked()) return; const t=traits[j], h=species[i].has; h.has(t)?h.delete(t):h.add(t); commit(); }
-  function loadExample(){ if(structureLocked()) return; traits=[...EXAMPLE.t]; species=EXAMPLE.s.map(([n,ts])=>({name:n,has:new Set(ts)})); rotations={}; commit(); }
+  function toggleCell(i,j){
+    if(cellsLocked()) return;
+    const s=species[i];
+    if(!s.unknown) s.unknown=new Set();
+    const t=traits[j];
+    const isO=s.has.has(t) && !s.unknown.has(t);
+    const isX=!s.has.has(t) && !s.unknown.has(t);
+    if(isO){
+      s.has.delete(t);
+      s.unknown.delete(t);
+    }else if(isX){
+      s.has.delete(t);
+      s.unknown.add(t);
+    }else{
+      s.has.add(t);
+      s.unknown.delete(t);
+    }
+    commit();
+  }
+  function loadExample(){ if(structureLocked()) return; traits=[...EXAMPLE.t]; species=EXAMPLE.s.map(([n,ts])=>({name:n,has:new Set(ts),unknown:new Set()})); rotations={}; commit(); }
   function clearAll(){ if(structureLocked()) return; traits=[]; species=[]; rotations={}; commit(); }
 
   /* ── 🎲 무작위 미션 제너레이터 ──────────────────────────────────
@@ -602,6 +637,13 @@
     }
     return null;
   }
+  function toggleFossilSlider() {
+    const chk = document.getElementById('fossilModeCheck');
+    const row = document.getElementById('fossilRatioRow');
+    if (chk && row) {
+      row.style.display = chk.checked ? 'flex' : 'none';
+    }
+  }
   function generateMission(){
     const key=document.getElementById('missionTheme').value;
     const nSp=+document.getElementById('spRange').value, nTr=+document.getElementById('trRange').value;
@@ -611,24 +653,89 @@
     appMode='free'; solved=false; solvedType=null; answerMatrix=null; submission=null; rotations={};
     document.body.classList.remove('locked-mode');
     traits=m.traits.slice();
-    species=m.species.map(s=>({name:s.name, has:new Set(s.has)}));
+
+    const isFossil = document.getElementById('fossilModeCheck') && document.getElementById('fossilModeCheck').checked;
+    if (isFossil) {
+      answerMatrix = m.species.map(s => traits.map(t => s.has.includes(t) ? 1 : 0));
+      appMode = 'fossil';
+      species = m.species.map(s => ({
+        name: s.name,
+        has: new Set(s.has),
+        unknown: new Set()
+      }));
+      const ratio = (+document.getElementById('fossilRange').value) / 100;
+      const totalCells = species.length * traits.length;
+      const K = Math.round(totalCells * ratio);
+      const cells = [];
+      for (let i = 0; i < species.length; i++) {
+        for (let j = 0; j < traits.length; j++) {
+          cells.push([i, j]);
+        }
+      }
+      shuffleArr(cells);
+      for (let idx = 0; idx < K; idx++) {
+        const [i, j] = cells[idx];
+        const t = traits[j];
+        species[i].has.delete(t);
+        species[i].unknown.add(t);
+      }
+    } else {
+      species = m.species.map(s => ({ name: s.name, has: new Set(s.has), unknown: new Set() }));
+    }
+
     commit();
     showView(3);
     setTimeout(()=>{ const el=document.getElementById('matrixWrap'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 160);
-    toast(`🎲 새 미션: ${PHYLO_DATABASE[key].title} · 종 ${species.length} · 형질 ${traits.length} — 📤 공유로 도전 출제!`);
+    if (isFossil) {
+      toast(`🦖 새 화석 미션: ${PHYLO_DATABASE[key].title} · 종 ${species.length} · 형질 ${traits.length} — 결실된 화석(?)을 추론하세요!`);
+    } else {
+      toast(`🎲 새 미션: ${PHYLO_DATABASE[key].title} · 종 ${species.length} · 형질 ${traits.length} — 📤 공유로 도전 출제!`);
+    }
   }
 
 /* ===================================================================
    2. 영속성 + 공유 링크(모드 플래그/도장 포함)
    =================================================================== */
-  function serialize(){ return { t:traits, s:species.map(sp=>({n:sp.name, h:traits.map(t=>sp.has.has(t)?1:0)})), r:rotations }; }
+  function serialize(){
+    return {
+      t: traits,
+      s: species.map(sp=>({
+        n: sp.name,
+        h: traits.map(t=>sp.has.has(t)?1:0),
+        u: traits.map(t=>(sp.unknown&&sp.unknown.has(t))?1:0)
+      })),
+      r: rotations,
+      mModel: analysisModel,
+      am: answerMatrix,
+      mode: appMode,
+      sol: solved,
+      solT: solvedType
+    };
+  }
   function deserialize(o){
     traits=(o.t||[]).slice();
-    species=(o.s||[]).map(x=>({name:x.n, has:new Set(traits.filter((t,i)=> x.h && x.h[i]))}));
+    species=(o.s||[]).map(x=>({
+      name: x.n,
+      has: new Set(traits.filter((t,i)=> x.h && x.h[i])),
+      unknown: new Set(traits.filter((t,i)=> x.u && x.u[i]))
+    }));
     rotations=o.r||{};
+    if (o.mModel) {
+      analysisModel = o.mModel;
+      const selectEl = document.getElementById('analysisModelSelect');
+      if (selectEl) selectEl.value = analysisModel;
+    } else {
+      analysisModel = 'parsimony';
+      const selectEl = document.getElementById('analysisModelSelect');
+      if (selectEl) selectEl.value = 'parsimony';
+    }
+    if (o.am) answerMatrix = o.am;
+    if (o.mode) appMode = o.mode;
+    if (o.sol !== undefined) solved = o.sol;
+    if (o.solT !== undefined) solvedType = o.solT;
   }
   // 도전/작도(잠금) 상태에서는 localStorage 자유데이터를 덮어쓰지 않는다
-  function saveLocal(){ if((appMode==='quiz'||appMode==='draw') && !solved) return; try{ localStorage.setItem(LS_KEY, JSON.stringify(serialize())); }catch(e){} }
+  function saveLocal(){ if((appMode==='quiz'||appMode==='draw'||appMode==='fossil') && !solved) return; try{ localStorage.setItem(LS_KEY, JSON.stringify(serialize())); }catch(e){} }
   function loadLocal(){ try{ const r=localStorage.getItem(LS_KEY); if(!r) return false; deserialize(JSON.parse(r)); return traits.length||species.length; }catch(e){ return false; } }
 
   const b64enc = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
@@ -684,10 +791,19 @@
     const rows=species.map((s,i)=>{
       const out=s.has.size===0?'<span class="tag-out">외군</span>':'';
       const cells=traits.map((t,j)=>{
-        const on=s.has.has(t), c=conflictTraits.has(t)?' conflict':'';
+        let state = 'X';
+        let cellClass = 'cell-x';
+        if (s.has.has(t)) {
+          state = 'O';
+          cellClass = 'cell-o';
+        } else if (s.unknown && s.unknown.has(t)) {
+          state = '?';
+          cellClass = 'cell-q';
+        }
+        const c=conflictTraits.has(t)?' conflict':'';
         return ro
-          ? `<td class="cell ${on?'cell-o':'cell-x'} ro" data-j="${j}" onclick="flashConflict(${j})">${on?'O':'X'}</td>`
-          : `<td class="cell ${on?'cell-o':'cell-x'}${c}" data-i="${i}" data-j="${j}" onclick="toggleCell(${i},${j})" onmouseenter="hoverConflict(${j})" onmouseleave="clearNeon()">${on?'O':'X'}</td>`;
+          ? `<td class="cell ${cellClass} ro" data-j="${j}" onclick="flashConflict(${j})">${state}</td>`
+          : `<td class="cell ${cellClass}${c}" data-i="${i}" data-j="${j}" onclick="toggleCell(${i},${j})" onmouseenter="hoverConflict(${j})" onmouseleave="clearNeon()">${state}</td>`;
       }).join('');
       return `<tr><td class="name"><span class="name-wrap">${lock?'':`<button class="del" onclick="removeSpecies(${i})" title="종 삭제">✕</button>`}${esc(s.name)}${out}</span></td>${cells}</tr>`;
     }).join('');
@@ -700,6 +816,7 @@
     ['traitInput','speciesInput','traitAddBtn','speciesAddBtn','exampleBtn','clearBtn'].forEach(id=>{ const e=document.getElementById(id); if(e) e.disabled=lock; });
     const txt = appMode==='quiz' ? '🎯 도전과제 진행 중 — 빈칸을 정답대로 채우면 잠금이 풀립니다. (형질·종 구조는 잠김)'
               : appMode==='draw' ? '🌳 계통수 작도 진행 중 — 계통수를 완성하면 잠금이 풀립니다. (표는 읽기 전용)'
+              : appMode==='fossil' ? '🦖 화석 추론 진행 중 — 결실된 화석(?)을 원래대로 채우면 잠금이 풀립니다. (형질·종 구조는 잠김)'
               : '';
     document.querySelectorAll('.lockmsg').forEach(el=>{ el.style.display=lock?'block':'none'; if(lock) el.innerHTML='🔒 '+txt; });
     const mb=document.getElementById('missionBox'); if(mb) mb.style.display=lock?'none':'block'; // 미션 생성기는 자유 모드에서만
@@ -744,6 +861,131 @@
     const childWith=buildNode(withG); childWith.syn=syn;
     return { type:'node', syn:[], children:[childWith, buildNode(withoutG)] };
   }
+  function changeAnalysisModel(val){
+    analysisModel = val;
+    const selectEl = document.getElementById('analysisModelSelect');
+    if (selectEl) selectEl.value = val;
+    commit();
+  }
+
+  function hammingDistance(s1, s2) {
+    let diff = 0;
+    let validTraits = 0;
+    for (const t of traits) {
+      const val1 = (s1.unknown && s1.unknown.has(t)) ? '?' : (s1.has.has(t) ? 'O' : 'X');
+      const val2 = (s2.unknown && s2.unknown.has(t)) ? '?' : (s2.has.has(t) ? 'O' : 'X');
+      if (val1 === '?' || val2 === '?') continue;
+      validTraits++;
+      if (val1 !== val2) diff++;
+    }
+    return validTraits > 0 ? diff / validTraits : 0;
+  }
+
+  function buildUPGMATree() {
+    if (species.length === 0) return null;
+    let clusters = species.map((s, idx) => ({
+      idx: idx,
+      leaves: [s.name],
+      node: {
+        type: 'leaf',
+        name: s.name,
+        has: s.has,
+        unknown: s.unknown || new Set(),
+        height: 0,
+        syn: []
+      },
+      size: 1
+    }));
+    let clusterIdCounter = 0;
+    clusters.forEach(c => { c.id = clusterIdCounter++; });
+    let distMap = new Map();
+    for (let i = 0; i < clusters.length; i++) {
+      for (let j = i + 1; j < clusters.length; j++) {
+        const d = hammingDistance(species[clusters[i].idx], species[clusters[j].idx]);
+        const key = clusters[i].id + "_" + clusters[j].id;
+        distMap.set(key, d);
+      }
+    }
+    function getDist(c1, c2) {
+      const id1 = Math.min(c1.id, c2.id);
+      const id2 = Math.max(c1.id, c2.id);
+      return distMap.get(id1 + "_" + id2);
+    }
+    while (clusters.length > 1) {
+      let minD = Infinity;
+      let minI = -1;
+      let minJ = -1;
+      for (let i = 0; i < clusters.length; i++) {
+        for (let j = i + 1; j < clusters.length; j++) {
+          const d = getDist(clusters[i], clusters[j]);
+          if (d < minD) {
+            minD = d;
+            minI = i;
+            minJ = j;
+          }
+        }
+      }
+      if (minI === -1 || minJ === -1) break;
+      const cI = clusters[minI];
+      const cJ = clusters[minJ];
+      const newCluster = {
+        id: clusterIdCounter++,
+        leaves: [...cI.leaves, ...cJ.leaves],
+        node: {
+          type: 'node',
+          height: minD / 2,
+          children: [cI.node, cJ.node],
+          syn: []
+        },
+        size: cI.size + cJ.size
+      };
+      const remainingClusters = clusters.filter((_, idx) => idx !== minI && idx !== minJ);
+      for (const cK of remainingClusters) {
+        const dIK = getDist(cI, cK);
+        const dJK = getDist(cJ, cK);
+        const dNewK = (cI.size * dIK + cJ.size * dJK) / (cI.size + cJ.size);
+        const id1 = Math.min(newCluster.id, cK.id);
+        const id2 = Math.max(newCluster.id, cK.id);
+        distMap.set(id1 + "_" + id2, dNewK);
+      }
+      clusters = remainingClusters;
+      clusters.push(newCluster);
+    }
+    return clusters[0].node;
+  }
+
+  function getLeavesOfNode(n) {
+    if (!n.children || !n.children.length) return [n.name];
+    let res = [];
+    for (const c of n.children) {
+      res.push(...getLeavesOfNode(c));
+    }
+    return res;
+  }
+
+  function allDescendantsHaveTrait(n, t) {
+    const leaves = getLeavesOfNode(n);
+    return leaves.every(name => {
+      const sp = species.find(s => s.name === name);
+      return sp && sp.has.has(t);
+    });
+  }
+
+  function assignSynapomorphies(node, parentNode) {
+    node.syn = [];
+    if (parentNode) {
+      for (const t of traits) {
+        if (allDescendantsHaveTrait(node, t) && !allDescendantsHaveTrait(parentNode, t)) {
+          node.syn.push(t);
+        }
+      }
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        assignSynapomorphies(child, node);
+      }
+    }
+  }
   function setSig(n){ if(!n.children||!n.children.length){ n.sig='L:'+n.name; return [n.name]; }
     let lv=[]; n.children.forEach(c=>lv.push(...setSig(c))); n.sig=lv.slice().sort().join('|'); return lv; }
   const ordered = n => rotations[n.sig] ? [...n.children].reverse() : n.children;
@@ -783,7 +1025,7 @@
     const need=document.getElementById('needData'), body=document.getElementById('resultBody');
     const auto=document.getElementById('autoResult'), drawA=document.getElementById('drawArea');
     document.getElementById('resultTitle').textContent = (appMode==='draw'&&!solved)?'계통수 그리기 도전'
-      : (appMode==='quiz'&&!solved)?'도전과제 · 임시 계통수' : '완성된 계통수';
+      : ((appMode==='quiz'||appMode==='fossil')&&!solved)? (appMode==='fossil'?'화석 추론 · 임시 계통수':'도전과제 · 임시 계통수') : '완성된 계통수';
 
     if(species.length<2 || traits.length<1){ need.style.display='block'; body.style.display='none'; conflictTraits=new Set(); updateHUD(); return; }
     need.style.display='none'; body.style.display='block';
@@ -792,10 +1034,21 @@
     // 🌳 계통수 그리기 모드 → 탭-합치기 빌더
     if(appMode==='draw' && !solved){ auto.style.display='none'; drawA.style.display='block'; renderDrawBuilder(); return; }
     drawA.style.display='none'; auto.style.display='block';
-    const quizUnsolved = appMode==='quiz' && !solved;   // 도전과제 미통과 → 틀린/임시 계통수
+    const quizUnsolved = (appMode==='quiz' || appMode==='fossil') && !solved;   // 도전과제 미통과 → 틀린/임시 계통수
 
-    const taxa=species.map(s=>({name:s.name,has:s.has}));
-    const root=buildNode(taxa); setSig(root);
+    let root;
+    if (analysisModel === 'upgma') {
+      root = buildUPGMATree();
+      if (root) {
+        assignSynapomorphies(root, null);
+        setSig(root);
+      }
+    } else {
+      const taxa=species.map(s=>({name:s.name,has:s.has}));
+      root=buildNode(taxa); setSig(root);
+    }
+    if (!root) { need.style.display='block'; body.style.display='none'; conflictTraits=new Set(); updateHUD(); return; }
+
     const plen=parsimonyLength(root), n=species.length;
     const idealMin=traits.filter(t=>{ const c=species.filter(s=>s.has.has(t)).length; return c>0&&c<n; }).length;
     const optimal=plen===idealMin && idealMin>0;
@@ -806,8 +1059,22 @@
     const ML=44,MT=66,rowH=86,plotW=540,labelW=250, xTip=ML+plotW, W=xTip+labelW, H=MT+(leafCount-1)*rowH+MT;
     const stepX=maxDepth>0?plotW/maxDepth:plotW;
     let yi=0;
-    (function assign(nn){ if(!nn.children||!nn.children.length){ nn.x=xTip; nn.y=MT+(yi++)*rowH; return; }
-      ordered(nn).forEach(assign); const ys=nn.children.map(c=>c.y); nn.y=(Math.min(...ys)+Math.max(...ys))/2; nn.x=ML+nn.depth*stepX; })(root);
+    const rootHeight = root.height;
+    (function assign(nn){
+      if(!nn.children||!nn.children.length){ nn.x=xTip; nn.y=MT+(yi++)*rowH; return; }
+      ordered(nn).forEach(assign);
+      const ys=nn.children.map(c=>c.y);
+      nn.y=(Math.min(...ys)+Math.max(...ys))/2;
+      if (analysisModel === 'upgma') {
+        if (rootHeight) {
+          nn.x = xTip - (nn.height / rootHeight) * plotW;
+        } else {
+          nn.x = ML;
+        }
+      } else {
+        nn.x = ML + nn.depth * stepX;
+      }
+    })(root);
 
     const P=[]; currentNodeSigs=[];
     const line=(x1,y1,x2,y2,d)=>`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" class="branch" style="animation-delay:${(d*0.12).toFixed(2)}s"/>`;
@@ -835,12 +1102,14 @@
     const banner=document.getElementById('banner');
     if(quizUnsolved){
       // 도전과제 미통과: 축하 대신 '아쉬움' + 다시 맞추라는 경고
-      const q=quizProgress(), prog=q.ones>0?Math.round(Math.max(0,(q.ones-q.mismatch)/q.ones)*100):100;
+      const q=quizProgress(), prog=q.total>0?Math.round(q.match/q.total*100):100;
+      const label = appMode==='fossil' ? '남은 미해결 칸 🦖' : '남은 오답 칸 🎯';
+      const detail = appMode==='fossil' ? '이 계통수는 현재 분석표로 그린 <b>임시 결과</b>예요. 화석 형질(?)을 정확히 복원해 남은 칸을 0으로 만드세요.' : '이 계통수는 현재 분석표로 그린 <b>임시 결과</b>예요. 정답 O를 정확히 배치해 남은 칸을 0으로 만드세요.';
       document.getElementById('scoreCard').innerHTML=
-        `<div class="dash"><div class="dash-row"><div class="dash-cost"><span class="dc-num">${q.mismatch}</span><span class="dc-lab">남은 오답 칸 🎯</span></div>
+        `<div class="dash"><div class="dash-row"><div class="dash-cost"><span class="dc-num">${q.mismatch}</span><span class="dc-lab">${label}</span></div>
            <div class="dash-verd warn">아직 정답 아님</div></div>
            <div class="dash-gauge"><div class="dg-fill" style="width:${prog}%"></div></div>
-           <div class="dash-sub">이 계통수는 현재 분석표로 그린 <b>임시 결과</b>예요. 정답 O를 정확히 배치해 남은 칸을 0으로 만드세요. (현재 ${q.match}/${q.total}칸 일치)</div></div>`;
+           <div class="dash-sub">${detail} (현재 ${q.match}/${q.total}칸 일치)</div></div>`;
       banner.innerHTML=`<div class="banner info">😢 아직 정답이 아니에요 — 위 계통수는 <b>틀린/미완성 분석표</b>로 그려졌어요. <button class="link" onclick="showView(3)">분석표 다시 맞추기 →</button></div>`;
     } else {
       const pct=plen>0?Math.round(Math.min(100,idealMin/plen*100)):100;
@@ -873,13 +1142,23 @@
   function quizProgress(){
     if(!answerMatrix) return {match:0,total:0,mismatch:0,ones:0};
     let match=0,total=0,ones=0;
-    species.forEach((s,i)=>traits.forEach((t,j)=>{ total++; const a=answerMatrix[i]?answerMatrix[i][j]:0; const v=s.has.has(t)?1:0;
-      if(a===1) ones++; if(v===a) match++; }));
+    species.forEach((s,i)=>traits.forEach((t,j)=>{
+      total++;
+      const a=answerMatrix[i]?answerMatrix[i][j]:0;
+      let v = 0;
+      if (s.unknown && s.unknown.has(t)) {
+        v = -1;
+      } else {
+        v = s.has.has(t)?1:0;
+      }
+      if(a===1) ones++;
+      if(v===a) match++;
+    }));
     // ones = 정답에서 O인 칸 수(= 빈칸 시작 시 틀린 칸 수). 진행도 기준점.
     return {match,total,mismatch:total-match,ones};
   }
-  function checkQuiz(){ if(appMode!=='quiz'||solved||!answerMatrix) return;
-    const {match,total}=quizProgress(); if(total>0 && match===total) onSolved('quiz'); }
+  function checkQuiz(){ if((appMode!=='quiz'&&appMode!=='fossil')||solved||!answerMatrix) return;
+    const {match,total}=quizProgress(); if(total>0 && match===total) onSolved(appMode); }
 
 /* ===================================================================
    7. 🌳 계통수 그리기 (탭-합치기 빌더)
@@ -939,14 +1218,14 @@
    =================================================================== */
   function updateHUD(){
     const hud=document.getElementById('hud');
-    const active=(appMode==='quiz'||appMode==='draw') && !solved;
+    const active=(appMode==='quiz'||appMode==='draw'||appMode==='fossil') && !solved;
     if(!active){ hud.style.display='none'; return; }
     hud.style.display='flex';
     const icEl=hud.querySelector('.hud-ic'), numEl=hud.querySelector('.hud-num'),
           labEl=hud.querySelector('.hud-lab'), fill=hud.querySelector('.hud-fill'), tgt=hud.querySelector('.hud-target');
-    if(appMode==='quiz'){
-      const q=quizProgress(), prog=q.ones>0?Math.max(0,(q.ones-q.mismatch)/q.ones):1;
-      icEl.textContent='🎯'; labEl.textContent='남은 오답 칸'; numEl.textContent=q.mismatch;
+    if(appMode==='quiz' || appMode==='fossil'){
+      const q=quizProgress(), prog=q.total>0?q.match/q.total:1;
+      icEl.textContent=appMode==='fossil'?'🦖':'🎯'; labEl.textContent=appMode==='fossil'?'남은 미해결 칸':'남은 오답 칸'; numEl.textContent=q.mismatch;
       fill.style.width=(prog*100)+'%'; fill.classList.toggle('best', q.mismatch===0);
       tgt.innerHTML='0이면 <b>통과</b>';
     } else {
@@ -963,7 +1242,7 @@
     refreshLockUI(); saveLocal();
     const frame=document.getElementById('goldFrame'); frame.style.display='block'; setTimeout(()=>frame.style.display='none',2600);
     celebrate_(); setTimeout(celebrate_,260);
-    const msg = mode==='quiz' ? '형질 분석 정답! 표를 완벽히 맞혔어요.' : '계통수 작도 성공! 최적 트리를 직접 완성했어요.';
+    const msg = mode==='quiz' ? '형질 분석 정답! 표를 완벽히 맞혔어요.' : mode==='fossil' ? '화석 추론 정답! 표를 완벽히 복원했어요.' : '계통수 작도 성공! 최적 트리를 직접 완성했어요.';
     openModal(`<div style="text-align:center"><div style="font-size:56px;line-height:1">🏆</div>
       <h3 style="font-size:22px;margin-top:6px">통과!</h3>
       <p class="hint">${msg}<br>이제 <b>표·종·형질·계통수를 자유롭게 수정</b>할 수 있어요.</p>
@@ -1061,6 +1340,10 @@
     <h3>형질 분석 도전!</h3>
     <p class="hint">출제자가 낸 표를 똑같이 맞혀보세요. 각 생물이 가진 형질 칸을 <b>O</b>로 정확히 채우면 잠금이 풀려 자유 편집 권한을 얻습니다. 하단 게이지로 진행도를 확인하세요.</p>
     <button class="btn btn-add" style="width:100%" onclick="closeModal(); showView(3)">도전 시작 🚀</button></div>`); }
+  function fossilIntro(){ openModal(`<div style="text-align:center"><div style="font-size:48px">🦖</div>
+    <h3>화석 추론 도전!</h3>
+    <p class="hint">결실된 화석 형질(?)을 정확하게 복원해 보세요. <b>O, X, ?</b> 상태로 칸이 순환합니다. 완벽히 복원하면 잠금이 풀려 자유 편집 권한을 얻습니다.</p>
+    <button class="btn btn-add" style="width:100%" onclick="closeModal(); showView(3)">도전 시작 🚀</button></div>`); }
   function drawIntro(){ openModal(`<div style="text-align:center"><div style="font-size:48px">🌳</div>
     <h3>계통수 그리기 도전!</h3>
     <p class="hint">표는 고정되어 있어요. 주어진 형질 정보로 <b>계통수를 직접 작도</b>하세요. 두 묶음을 차례로 탭하면 자매군으로 합쳐집니다. 최적 트리를 완성하면 자유 편집 권한을 얻습니다.</p>
@@ -1112,16 +1395,16 @@
     renderTraitChips(); renderSpeciesChips(); renderMatrix();
     if(appMode==='draw') initDraw();
     refreshLockUI(); updateHUD();
-    // 모드별 진입 화면: 도전/작도/제출은 해당 화면으로, 자유 모드는 시작(분기 선택) 화면
     if(submission){ showView(4); setTimeout(()=>{ submissionIntro(); celebrate_(); }, 300); }
     else if(appMode==='quiz'){ showView(3); quizIntro(); }
+    else if(appMode==='fossil'){ showView(3); fossilIntro(); }
     else if(appMode==='draw'){ showView(4); drawIntro(); }
     else showView(0);
   }
 
   Object.assign(window, { addTrait, removeTrait, addSpecies, removeSpecies, toggleCell, loadExample, clearAll,
     showView, rotate, openShare, setShareType, refreshShareLink, copyShare, closeModal, openHelp, hoverConflict, clearNeon, flashConflict,
-    drawTap, drawUndo, drawReset, afterSolve, startTour, endTour, nextTour, generateMission, onThemeChange });
+    drawTap, drawUndo, drawReset, afterSolve, startTour, endTour, nextTour, generateMission, onThemeChange, changeAnalysisModel, toggleFossilSlider });
 
   document.addEventListener('DOMContentLoaded', init);
 </script>
