@@ -192,6 +192,15 @@
   .syn-mark{ fill:var(--accent); stroke:#fff; stroke-width:2.5; }
   .syn-pill{ fill:var(--accent-soft); stroke:var(--accent); stroke-width:2; }
   .syn-label{ font:700 23px 'Pretendard','Malgun Gothic',sans-serif; fill:var(--accent-ink); }
+  /* 수렴진화(독립적 재진화) 마크 — 빨강 */
+  .syn-mark-homo{ fill:var(--x); stroke:#fff; stroke-width:2.5; }
+  .syn-pill-homo{ fill:var(--x-soft); stroke:var(--x); stroke-width:2; }
+  .syn-label-homo{ font:700 23px 'Pretendard','Malgun Gothic',sans-serif; fill:var(--x); }
+  .syn-x{ font:900 15px 'Pretendard','Malgun Gothic',sans-serif; fill:#fff; }
+  /* 형질 소실(역전) 마크 — 회색 */
+  .syn-mark-loss{ fill:#94a3b8; stroke:#fff; stroke-width:2.5; }
+  .syn-pill-loss{ fill:#f1f5f9; stroke:#94a3b8; stroke-width:2; }
+  .syn-label-loss{ font:700 23px 'Pretendard','Malgun Gothic',sans-serif; fill:#475569; }
   .root-cap{ font:700 21px 'Pretendard','Malgun Gothic',sans-serif; fill:var(--muted); }
   .node-hit{ fill:transparent; cursor:pointer; }
   .node-dot{ fill:#fff; stroke:var(--secondary); stroke-width:3.5; transition:fill .15s; }
@@ -206,6 +215,8 @@
   .lg-dot{ width:13px; height:13px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px #fff,0 0 0 3px var(--accent); }
   .lg-node{ width:13px; height:13px; border-radius:50%; background:#fff; border:3px solid var(--secondary); }
   .lg-out{ width:12px; height:12px; border-radius:4px; background:#f5f3ff; border:1px solid #ddd6fe; }
+  .lg-conv{ width:13px; height:13px; border-radius:50%; background:var(--x); box-shadow:0 0 0 2px #fff,0 0 0 3px var(--x); }
+  .lg-loss{ width:13px; height:13px; border-radius:50%; background:#94a3b8; box-shadow:0 0 0 2px #fff,0 0 0 3px #94a3b8; }
 
   /* 피어 리뷰 */
   .fb-badge{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 14px; border-radius:14px;
@@ -414,11 +425,14 @@
           <div id="treeBox" class="tree-box"></div>
           <div class="legend">
             <span><i class="lg-line"></i> 진화·분기 경로</span>
-            <span><i class="lg-dot"></i> 형질이 처음 나타난 곳</span>
+            <span><i class="lg-dot"></i> 공유파생형질(1회 진화)</span>
+            <span><i class="lg-conv"></i> 수렴진화 ✖ (독립적 재진화)</span>
+            <span><i class="lg-loss"></i> 형질 소실 ↓ (역전)</span>
             <span><i class="lg-node"></i> 분기점(터치=회전)</span>
             <span><i class="lg-out"></i> 외군</span>
           </div>
           <p class="hint" style="margin-top:14px">💡 흰 <b>분기점(●)</b>을 누르면 가지의 위아래 순서가 바뀝니다. 순서가 달라도 진화적 관계는 똑같아요.</p>
+          <p class="hint" style="margin-top:-6px">🔬 같은 형질에 <b style="color:var(--x)">빨간 ✖</b>가 여러 번 보이면 <b>수렴진화</b>예요 — 가까운 조상에서 물려받은 게 아니라 <b>서로 다른 가지에서 따로 진화</b>한 것이라 공유파생형질이 아닙니다. <b>일관성 지수(CI)</b>가 100%에 가까울수록 형질들이 계통수와 잘 맞습니다.</p>
         </div>
         <div class="toolbar">
           <button class="btn btn-ghost" onclick="openShare()">📤 공유 · QR</button>
@@ -1018,6 +1032,60 @@
     return lv;
   }
 
+  /* ── 🔬 수렴진화 진단 ───────────────────────────────────────────────
+     완성된 트리 위에서 각 형질이 "몇 번 독립적으로 진화했는지"를 따져
+     공유파생형질 / 수렴진화 / 형질 소실을 분류해 가지(자식 노드)에 표시한다.
+
+     형질 t를 가진 종들이 트리에서 한 가지(클레이드)로 깔끔히 모이면
+     → 1회 진화 = 진짜 공유파생형질(node.syn, 청록 ●).
+     흩어져 있으면 두 가지 해석을 비교해 더 단순한 쪽(사건 수가 적은 쪽)을 택한다:
+       · 독립 획득 모델 : 여러 가지에서 따로 생김  → 수렴진화 (node.synHomo, 빨강 ✖)
+       · 1회 획득+소실 모델: 공통조상이 갖다가 일부에서 사라짐 → 소실(node.synLoss, 회색 ↓)
+     이렇게 하면 토폴로지에 상관없이 "수렴진화 vs 형질 소실"을 일관되게 판정한다. */
+  function analyzeHomoplasy(root){
+    (function clr(n){ n.syn=[]; n.synHomo=[]; n.synLoss=[]; (n.children||[]).forEach(clr); })(root);
+    const convergent=[], reversal=[];
+    const total = (function cnt(n){ return (!n.children||!n.children.length)?1:n.children.reduce((a,c)=>a+cnt(c),0); })(root);
+    for(const t of traits){
+      // 1) 노드별로 '있음 잎 수(_pos)/전체 잎 수(_tot)'를 집계
+      (function deco(n){
+        if(!n.children||!n.children.length){ n._pos=(n.has&&n.has.has(t))?1:0; n._tot=1; }
+        else { n._pos=0; n._tot=0; n.children.forEach(c=>{ deco(c); n._pos+=c._pos; n._tot+=c._tot; }); }
+        n._allPos = n._tot>0 && n._pos===n._tot;     // 후손 전부 '있음'
+        n._allAbs = n._pos===0;                       // 후손 전부 '없음'
+      })(root);
+      const posTotal=root._pos;
+      // 정보형질만 의미 있음 (0<있음<전체). 그 외(모두 있음/모두 없음/단일 자가형질)는 건너뜀
+      if(posTotal<=0 || posTotal>=total){ continue; }
+
+      // 2) 독립 획득 모델: '있음'으로 꽉 찬 최상위 가지마다 1회 기원
+      const origins=[];
+      (function findOrigins(n,parentAllPos){
+        if(n._allPos && !parentAllPos){ origins.push(n); return; }   // 여기서 1회 생김 → 후손은 물려받음
+        (n.children||[]).forEach(c=>findOrigins(c,n._allPos));
+      })(root,false);
+
+      // 단일 기원 = 깔끔한 공유파생형질
+      if(origins.length===1){ origins[0].syn.push(t); continue; }
+
+      // 3) 1회 획득+소실 모델: 모든 '있음'을 품는 최소 공통조상(MRCA)에서 1회 생긴 뒤 사라짐
+      let mrca=root;
+      while(mrca.children){ const nx=mrca.children.find(c=>c._pos===posTotal); if(nx) mrca=nx; else break; }
+      const losses=[];
+      (function findLosses(n,parentAllAbs){
+        if(n._allAbs && !parentAllAbs){ losses.push(n); return; }
+        (n.children||[]).forEach(c=>findLosses(c,n._allAbs));
+      })(mrca,false);
+
+      // 4) 사건 수가 적은 해석을 채택 (동률이면 수렴진화로)
+      const gainEvents=origins.length, lossEvents=1+losses.length;
+      if(gainEvents<=lossEvents){ convergent.push(t); origins.forEach(n=>n.synHomo.push(t)); }
+      else { reversal.push(t); mrca.syn.push(t); losses.forEach(n=>n.synLoss.push(t)); }
+    }
+    (function cl(n){ delete n._pos; delete n._tot; delete n._allPos; delete n._allAbs; (n.children||[]).forEach(cl); })(root);
+    return { convergent, reversal };
+  }
+
 /* ===================================================================
    5. 결과 렌더: 자동 계통수 / 계통수 그리기 빌더 분기
    =================================================================== */
@@ -1039,20 +1107,19 @@
     let root;
     if (analysisModel === 'upgma') {
       root = buildUPGMATree();
-      if (root) {
-        assignSynapomorphies(root, null);
-        setSig(root);
-      }
+      if (root) setSig(root);
     } else {
       const taxa=species.map(s=>({name:s.name,has:s.has}));
       root=buildNode(taxa); setSig(root);
     }
     if (!root) { need.style.display='block'; body.style.display='none'; conflictTraits=new Set(); updateHUD(); return; }
+    // 🔬 트리 위에서 수렴진화·형질 소실을 복원해 가지마다 표시 심기 (syn/synHomo/synLoss)
+    const hp = analyzeHomoplasy(root);
 
     const plen=parsimonyLength(root), n=species.length;
     const idealMin=traits.filter(t=>{ const c=species.filter(s=>s.has.has(t)).length; return c>0&&c<n; }).length;
     const optimal=plen===idealMin && idealMin>0;
-    const { involved, firstPair }=analyzeConflicts(); conflictTraits=involved;
+    const { involved }=analyzeConflicts(); conflictTraits=involved;
 
     let maxDepth=0; (function setD(nn,d){ nn.depth=d; if(d>maxDepth)maxDepth=d; (nn.children||[]).forEach(c=>setD(c,d+1)); })(root,0);
     let leafCount=0; (function cnt(nn){ (nn.children&&nn.children.length)?ordered(nn).forEach(cnt):leafCount++; })(root);
@@ -1082,11 +1149,26 @@
       arr.forEach((t,k)=>{ const fs=23,padX=13,w=t.length*fs*1.02+padX*2,cy=y-24-k*38;
         s+=`<g class="fade" style="animation-delay:${(d*0.12+0.55+k*0.08).toFixed(2)}s"><rect x="${(cx-w/2).toFixed(1)}" y="${(cy-fs*0.95).toFixed(1)}" width="${w.toFixed(1)}" height="${(fs*1.65).toFixed(1)}" rx="${(fs*0.85).toFixed(1)}" class="syn-pill"/><text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" class="syn-label" text-anchor="middle" dominant-baseline="middle">${esc(t)}</text></g>`; });
       return s; }
+    // 수렴진화(✖)·형질 소실(↓) 마크 — 가지 아래쪽에 빨강/회색으로 표시
+    function synBadgesAlt(x1,x2,y,arr,d,kind){ const cx=(x1+x2)/2;
+      const mk=kind==='homo'?'syn-mark-homo':'syn-mark-loss';
+      const pl=kind==='homo'?'syn-pill-homo':'syn-pill-loss';
+      const lb=kind==='homo'?'syn-label-homo':'syn-label-loss';
+      const pre=kind==='homo'?'✖ ':'↓ ';
+      let s=`<circle cx="${cx.toFixed(1)}" cy="${y.toFixed(1)}" r="9" class="${mk} fade" style="animation-delay:${(d*0.12+0.45).toFixed(2)}s"/>`;
+      if(kind==='homo') s+=`<text x="${cx.toFixed(1)}" y="${(y+0.5).toFixed(1)}" class="syn-x fade" text-anchor="middle" dominant-baseline="middle" style="animation-delay:${(d*0.12+0.45).toFixed(2)}s">✕</text>`;
+      arr.forEach((t,k)=>{ const lab=pre+t, fs=23,padX=13,w=lab.length*fs*1.02+padX*2,cy=y+30+k*38;
+        s+=`<g class="fade" style="animation-delay:${(d*0.12+0.55+k*0.08).toFixed(2)}s"><rect x="${(cx-w/2).toFixed(1)}" y="${(cy-fs*0.95).toFixed(1)}" width="${w.toFixed(1)}" height="${(fs*1.65).toFixed(1)}" rx="${(fs*0.85).toFixed(1)}" class="${pl}"/><text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" class="${lb}" text-anchor="middle" dominant-baseline="middle">${esc(lab)}</text></g>`; });
+      return s; }
     function drawNode(nn){
       if(nn.children&&nn.children.length){
         const kids=ordered(nn), ys=kids.map(c=>c.y);
         P.push(line(nn.x,Math.min(...ys),nn.x,Math.max(...ys),nn.depth));
-        kids.forEach(c=>{ P.push(line(nn.x,c.y,c.x,c.y,c.depth)); if(c.syn&&c.syn.length) P.push(synBadges(nn.x,c.x,c.y,c.syn,c.depth)); drawNode(c); });
+        kids.forEach(c=>{ P.push(line(nn.x,c.y,c.x,c.y,c.depth));
+          if(c.syn&&c.syn.length) P.push(synBadges(nn.x,c.x,c.y,c.syn,c.depth));
+          if(c.synHomo&&c.synHomo.length) P.push(synBadgesAlt(nn.x,c.x,c.y,c.synHomo,c.depth,'homo'));
+          if(c.synLoss&&c.synLoss.length) P.push(synBadgesAlt(nn.x,c.x,c.y,c.synLoss,c.depth,'loss'));
+          drawNode(c); });
         if(kids.length>=2){ const idx=currentNodeSigs.length; currentNodeSigs.push(nn.sig);
           P.push(`<g class="nodeg" onclick="rotate(${idx})"><title>가지 회전</title><circle cx="${nn.x}" cy="${nn.y.toFixed(1)}" r="7" class="node-dot fade" style="animation-delay:${(nn.depth*0.12+0.3).toFixed(2)}s"/><circle cx="${nn.x}" cy="${nn.y.toFixed(1)}" r="20" class="node-hit"/></g>`); }
       } else {
@@ -1112,14 +1194,20 @@
            <div class="dash-sub">${detail} (현재 ${q.match}/${q.total}칸 일치)</div></div>`;
       banner.innerHTML=`<div class="banner info">😢 아직 정답이 아니에요 — 위 계통수는 <b>틀린/미완성 분석표</b>로 그려졌어요. <button class="link" onclick="showView(3)">분석표 다시 맞추기 →</button></div>`;
     } else {
-      const pct=plen>0?Math.round(Math.min(100,idealMin/plen*100)):100;
+      const pct=plen>0?Math.round(Math.min(100,idealMin/plen*100)):100;   // 일관성 지수(CI)
+      const convN=hp.convergent.length, revN=hp.reversal.length, extra=plen-idealMin;
       document.getElementById('scoreCard').innerHTML=
         `<div class="dash"><div class="dash-row"><div class="dash-cost"><span class="dc-num">${plen}</span><span class="dc-lab">진화 비용 ⚡</span></div>
-           <div class="dash-verd ${optimal?'best':'warn'}">${optimal?'🏆 최적!':'최적까지 '+(plen-idealMin)+'단계'}</div></div>
+           <div class="dash-verd ${optimal?'best':'warn'}">${optimal?'🏆 CI 100%':'일관성 지수 '+pct+'%'}</div></div>
            <div class="dash-gauge"><div class="dg-fill ${optimal?'best':''}" style="width:${pct}%"></div></div>
-           <div class="dash-sub">현재 변화 ${plen}회 · 이론상 최소 ${idealMin}회${optimal?' · 호모플라시 0 🎉':' · 중복 진화 '+(plen-idealMin)+'회'}</div></div>`;
-      if(firstPair) banner.innerHTML=`<div class="banner info">⚠️ <b>「${esc(firstPair[0])}」</b>와 <b>「${esc(firstPair[1])}」</b>가 겹치지만 포함관계가 아닙니다 — 수렴·평행진화 가능성. 충돌 형질을 표에서 노란색으로 표시했습니다. <button class="link" onclick="showView(3)">표에서 보기 →</button></div>`;
-      else { const outs=species.filter(s=>s.has.size===0).map(s=>s.name); banner.innerHTML=`<div class="banner ok">✅ 모든 형질이 깔끔하게 중첩됩니다${outs.length?` · 외군: <b>${esc(outs.join(', '))}</b>`:''}.</div>`; }
+           <div class="dash-sub">변화 ${plen}회 · 이론상 최소 ${idealMin}회${optimal?' · 수렴진화 0 🎉':` · 수렴진화 ${convN}개 형질${revN?` · 형질 소실 ${revN}개`:''} · 중복 진화 ${extra}회`}</div></div>`;
+      if(convN||revN){
+        const parts=[];
+        if(convN) parts.push(`<b>「${hp.convergent.map(esc).join('」, 「')}」</b> → 수렴진화 ✖ (서로 다른 가지에서 <b>독립적으로</b> 진화 = 공유파생형질 아님)`);
+        if(revN) parts.push(`<b>「${hp.reversal.map(esc).join('」, 「')}」</b> → 형질 소실 ↓ (생겼다가 다시 사라짐)`);
+        banner.innerHTML=`<div class="banner info">🔬 <b>수렴진화 진단</b> — ${parts.join(' · ')}. 계통수에서 <span style="color:var(--x);font-weight:800">빨간 ✖</span> 자리가 같은 형질이 두 번 진화한 곳이에요. 일관성 지수(CI) <b>${pct}%</b> (100%일수록 깔끔). <button class="link" onclick="showView(3)">표에서 충돌 보기 →</button></div>`;
+      }
+      else { const outs=species.filter(s=>s.has.size===0).map(s=>s.name); banner.innerHTML=`<div class="banner ok">✅ 모든 형질이 공유파생형질로 깔끔하게 중첩됩니다 (수렴진화 0 · CI 100%)${outs.length?` · 외군: <b>${esc(outs.join(', '))}</b>`:''}.</div>`; }
     }
 
     renderMatrix(); updateHUD();
