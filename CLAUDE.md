@@ -37,7 +37,7 @@ this structure when adding code:
 | 1 | Data mutation | `commit()`, `addTrait`/`addSpecies`, `toggleCell`, `buildMission` (random mission generator) |
 | 2 | Persistence & share links | `serialize`/`deserialize`, `saveLocal`/`loadLocal`, `encodeState`/`decodeState` |
 | 3 | Chips / matrix render | `renderMatrix`, `refreshLockUI`, neon conflict highlighting |
-| 4 | Tree build + analysis | `buildNode` (parsimony), `buildUPGMATree` + `hammingDistance` (UPGMA), `parsimonyLength` (Fitch), `analyzeConflicts` |
+| 4 | Tree build + analysis | `buildNode` (parsimony), `buildUPGMATree` + `hammingDistance` (UPGMA), `parsimonyLength` (Fitch), `analyzeConflicts`, `analyzeHomoplasy` (수렴진화 진단: 형질별 독립 기원 수로 공유파생형질·수렴진화·형질 소실 분류) |
 | 5 | Result render | `renderTree`, SVG drawing, celebration/fail effects |
 | 6 | Quiz matching | `quizProgress`, `checkQuiz` |
 | 7 | Draw builder | tap-to-merge clade builder (`drawTap`, `checkDraw`) |
